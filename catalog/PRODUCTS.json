@@ -1,0 +1,736 @@
+{
+  "_comment": "The ONE edit point. Add a product here (one object) + drop its page at <id>/index.html and the landing picks it up. No per-page hand-edit.",
+  "chain": {
+    "name": "Base",
+    "id": 8453,
+    "explorer": "https://basescan.org"
+  },
+  "treasury": "0xe218E382F28A094f9f64E903ee3cb1750A7f204B",
+  "products": [
+    {
+      "id": "miniapp",
+      "title": "Pay in-feed (Farcaster / Base mini app)",
+      "tag": "payments",
+      "what": "A pay link inside a Farcaster cast or Base mini app: tap, pay USDC on Base, receipt in the thread. The deposit address is derived live from the P2 Registry's predict(), and the fee is read live on-chain.",
+      "fee": "500 bps on each forwarded payment (the P2 Registry's fee, paid by the forwarder the link derives) — live value in the check below",
+      "start": "Open the mini app, paste or make a pay link, tap Pay.",
+      "contract": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8",
+      "role": "P2 Registry (the mini app derives its deposit address)",
+      "source_file": "products/miniapp/.well-known/farcaster.json",
+      "door": "get-paid",
+      "order": 1,
+      "entry": [
+        {
+          "sig": "register(address)",
+          "selector": "0x4420e486",
+          "role": "register",
+          "target": "self"
+        }
+      ],
+      "reads": [
+        {
+          "name": "predict",
+          "sig": "predict(address,address)",
+          "selector": "0x5c911b29",
+          "type": "address",
+          "unit": ""
+        },
+        {
+          "name": "feeBps",
+          "sig": "feeBps()",
+          "selector": "0x24a9d853",
+          "type": "uint256",
+          "unit": "bps"
+        }
+      ]
+    },
+    {
+      "id": "p2-forwarder",
+      "title": "Micro-payment forwarder",
+      "tag": "payments",
+      "what": "Register once, get a personal deposit address. Anything sent there auto-forwards to YOUR destination within ~1 block.",
+      "fee": "500 bps on each forwarded payment \u2014 live value in the check below",
+      "start": "Open the page, register a destination, share the address it gives you.",
+      "contract": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8",
+      "role": "Registry (integrator entry point)",
+      "source_file": "products/p2-forwarder/KEY-RECORD.md",
+      "door": "get-paid",
+      "order": 4,
+      "entry": [
+        {
+          "sig": "register(address)",
+          "selector": "0x4420e486",
+          "role": "register",
+          "target": "self"
+        }
+      ],
+      "reads": [
+        {
+          "name": "owner",
+          "sig": "owner()",
+          "selector": "0x8da5cb5b",
+          "type": "address",
+          "unit": ""
+        },
+        {
+          "name": "feeBps",
+          "sig": "feeBps()",
+          "selector": "0x24a9d853",
+          "type": "uint256",
+          "unit": "bps"
+        },
+        {
+          "name": "maxFeeBps",
+          "sig": "MAX_FEE_BPS()",
+          "selector": "0xd55be8c6",
+          "type": "uint256",
+          "unit": "bps"
+        },
+        {
+          "name": "feeRecipient",
+          "sig": "feeRecipient()",
+          "selector": "0x46904840",
+          "type": "address",
+          "unit": ""
+        },
+        {
+          "name": "paused",
+          "sig": "paused()",
+          "selector": "0x5c975abb",
+          "type": "bool",
+          "unit": ""
+        }
+      ],
+      "events": [
+        {
+          "name": "Registered",
+          "topic0": "0xe87c38afe1530714b547d22c5653192a993f1f3c037bd7947063558cb86e0bd2",
+          "counter": "payments"
+        }
+      ],
+      "keeper_task": "forward"
+    },
+    {
+      "id": "g2b-escrow",
+      "title": "Escrow as a service",
+      "tag": "payments",
+      "what": "Lock a token amount against a hashlock or a nominated arbiter, share the escrow address, counterparty releases it \u2014 or the payer refunds after the timeout. Funds sit in the escrow contract, never a server.",
+      "fee": "500 bps on release only, nothing on refund \u2014 live value in the check below",
+      "start": "Open the page, create a deal, share the escrow link.",
+      "contract": "0x80793a7d35f735bc76BeAf22B1f413926818f410",
+      "role": "EscrowFactory (the only contract a user calls)",
+      "source_file": "products/g2b-escrow/MAINNET-LIVE.md",
+      "door": "pay-safely",
+      "order": 1,
+      "entry": [
+        {
+          "sig": "create(address,address,uint256,bytes32,uint64)",
+          "selector": "0xa083c5e1",
+          "role": "create",
+          "target": "self"
+        },
+        {
+          "sig": "release(bytes32)",
+          "selector": "0x67d42a8b",
+          "role": "release",
+          "target": "escrow"
+        },
+        {
+          "sig": "refund()",
+          "selector": "0x590e1ae3",
+          "role": "refund",
+          "target": "escrow"
+        }
+      ],
+      "reads": [
+        {
+          "name": "owner",
+          "sig": "owner()",
+          "selector": "0x8da5cb5b",
+          "type": "address",
+          "unit": ""
+        },
+        {
+          "name": "feeBps",
+          "sig": "feeBps()",
+          "selector": "0x24a9d853",
+          "type": "uint256",
+          "unit": "bps"
+        },
+        {
+          "name": "maxFeeBps",
+          "sig": "MAX_FEE_BPS()",
+          "selector": "0xd55be8c6",
+          "type": "uint256",
+          "unit": "bps"
+        },
+        {
+          "name": "feeRecipient",
+          "sig": "feeRecipient()",
+          "selector": "0x46904840",
+          "type": "address",
+          "unit": ""
+        },
+        {
+          "name": "paused",
+          "sig": "paused()",
+          "selector": "0x5c975abb",
+          "type": "bool",
+          "unit": ""
+        }
+      ],
+      "events": [
+        {
+          "name": "Created",
+          "topic0": "0xe7411cce5d2e792717d7082ce93ae01123c0b6047cd263f0f8d43e647bb5bdd6",
+          "counter": "escrows"
+        }
+      ],
+      "sourcify": "https://repo.sourcify.dev/8453/0x80793a7d35f735bc76BeAf22B1f413926818f410"
+    },
+    {
+      "id": "g3a-sponsorship",
+      "title": "Gas sponsorship (meta-tx relay)",
+      "tag": "infra",
+      "what": "A merchant integrates us; their users transact gaslessly via an EIP-7702 relay. The user acts, OUR relay pays the gas \u2014 the actor/payer split is the whole product.",
+      "fee": "per-sponsored-tx fee to the merchant (>= 1.5x gas floor)",
+      "start": "Read a real sponsored tx on the page: type-4 shape, delegated EOA, actor != payer.",
+      "contract": "0x83303e59d4F9798C3B49f9D4C6E522FfeC05f2A5",
+      "role": "SponsorTarget (the 7702 delegate code)",
+      "source_file": "products/g3a-sponsorship/MAINNET-ADDRS.txt",
+      "door": "build",
+      "order": 3,
+      "entry": [
+        {
+          "sig": "sponsoredCall(address,bytes)",
+          "selector": "0x4d7ffe7a",
+          "role": "sponsor",
+          "target": "self"
+        }
+      ],
+      "reads": [],
+      "events": []
+    },
+    {
+      "id": "g4b-receipts",
+      "title": "Receipt NFT (proof-of-payment)",
+      "tag": "payments",
+      "what": "When a g2b escrow settles, anyone may mint exactly one on-chain receipt NFT to the payer. Fully on-chain tokenURI (base64 JSON) \u2014 no server, no IPFS.",
+      "fee": "mintFeeWei = 50000000000000 wei (0.00005 ETH) live; free at deploy \u2014 live value in the check below",
+      "fee_sel": "0x06220534",
+      "fee_unit": "wei",
+      "start": "Open the page, paste a settled escrow, mint the receipt.",
+      "contract": "0x6d140b934a06410a8C36eEe926c967467ab6d46f",
+      "role": "ReceiptNFT (ERC-721)",
+      "source_file": "products/g4b-receipts/EVIDENCE-mainnet-deploy.md",
+      "door": "pay-safely",
+      "order": 2,
+      "entry": [
+        {
+          "sig": "mintForEscrow(address)",
+          "selector": "0xa98aeecb",
+          "role": "mint",
+          "target": "self"
+        }
+      ],
+      "reads": [
+        {
+          "name": "owner",
+          "sig": "owner()",
+          "selector": "0x8da5cb5b",
+          "type": "address",
+          "unit": ""
+        },
+        {
+          "name": "feeRecipient",
+          "sig": "feeRecipient()",
+          "selector": "0x46904840",
+          "type": "address",
+          "unit": ""
+        },
+        {
+          "name": "mintFeeWei",
+          "sig": "mintFeeWei()",
+          "selector": "0x06220534",
+          "type": "uint256",
+          "unit": "wei"
+        }
+      ],
+      "events": [
+        {
+          "name": "Minted",
+          "topic0": "0x5de08df36cd02b2b914551ee03ceb2ecd7d416bcca1f09bdf6a0592c276c0eba",
+          "counter": "receipts"
+        }
+      ],
+      "sourcify": "https://repo.sourcify.dev/8453/0x6d140b934a06410a8C36eEe926c967467ab6d46f"
+    },
+    {
+      "id": "p3-router",
+      "title": "Slippage-bounded swap router",
+      "tag": "trading",
+      "what": "An on-chain router that aggregates existing Uniswap V3 + Aerodrome pools (holds no liquidity of its own). Quotes are chosen off-chain; the contract executes the hops it is handed.",
+      "fee": "5 bps on input, to the treasury",
+      "start": "Open the page, see the per-chain address set and a real quote.",
+      "contract": "0xEB28D5cA0783D01dd2E4bF86AD7024ca156aB047",
+      "role": "Router (Base mainnet)",
+      "source_file": "products/p3-router/KEY-RECORD-MAINNET.md",
+      "door": "build",
+      "order": 1,
+      "entry": [
+        {
+          "sig": "swapExactTokensForTokens((uint256,uint256,(uint8,address,address,uint24,bool,address,address)[],address,uint256))",
+          "selector": "0xd3bd0b52",
+          "role": "swap",
+          "target": "self"
+        }
+      ],
+      "reads": [
+        {
+          "name": "feeBps",
+          "sig": "feeBps()",
+          "selector": "0x24a9d853",
+          "type": "uint256",
+          "unit": "bps"
+        },
+        {
+          "name": "maxFeeBps",
+          "sig": "MAX_FEE_BPS()",
+          "selector": "0xd55be8c6",
+          "type": "uint256",
+          "unit": "bps"
+        },
+        {
+          "name": "previewFee",
+          "sig": "previewFee(uint256)",
+          "selector": "0x35e856f2",
+          "type": "uint256",
+          "unit": "token"
+        }
+      ],
+      "events": []
+    },
+    {
+      "id": "f1c-duster",
+      "title": "Dust funnel (dust -> USDC)",
+      "tag": "acquisition",
+      "what": "Connect a wallet, see scattered dust balances, one click sweeps them to USDC on Base. Non-custodial, stateless contract.",
+      "fee": "ZERO fee by design (acquisition funnel)",
+      "start": "Open the page, connect, sweep.",
+      "contract": "0x5F6f5dee0c371ed13D9151B9C64d9fBf30245800",
+      "role": "DustSweeper",
+      "source_file": "products/f1c-duster/KEY-RECORD.md",
+      "door": "build",
+      "order": 2,
+      "entry": [
+        {
+          "sig": "sweep(address[],(uint8,address,address,uint24,address)[],uint256[])",
+          "selector": "0xe7ea3ccb",
+          "role": "sweep",
+          "target": "self"
+        }
+      ],
+      "reads": [],
+      "events": []
+    },
+    {
+      "id": "g2a-streams",
+      "title": "Payment streams",
+      "tag": "payments",
+      "what": "Create a streaming payment: a vault drips a token to a recipient over time; the recipient withdraws whatever has vested, permissionlessly.",
+      "fee": "500 bps, charged only on withdraw \u2014 live value in the check below",
+      "start": "Open the page, create a stream or view a live one.",
+      "contract": "0x2bB5b763a8A85e446909674177e65cb6F1052b4F",
+      "role": "StreamFactory (Base mainnet)",
+      "source_file": "products/g2a-streams/KEY-RECORD.md",
+      "door": "get-paid",
+      "order": 3,
+      "entry": [
+        {
+          "sig": "createStream(address,address,uint256,uint64,uint64)",
+          "selector": "0x88379c90",
+          "role": "create",
+          "target": "self"
+        },
+        {
+          "sig": "predict(address,address,address,uint256,uint64,uint64)",
+          "selector": "0xce580c87",
+          "role": "predict",
+          "target": "self"
+        },
+        {
+          "sig": "withdraw()",
+          "selector": "0x3ccfd60b",
+          "role": "settle",
+          "target": "vault"
+        }
+      ],
+      "reads": [
+        {
+          "name": "owner",
+          "sig": "owner()",
+          "selector": "0x8da5cb5b",
+          "type": "address",
+          "unit": ""
+        },
+        {
+          "name": "feeBps",
+          "sig": "feeBps()",
+          "selector": "0x24a9d853",
+          "type": "uint256",
+          "unit": "bps"
+        },
+        {
+          "name": "maxFeeBps",
+          "sig": "MAX_FEE_BPS()",
+          "selector": "0xd55be8c6",
+          "type": "uint256",
+          "unit": "bps"
+        },
+        {
+          "name": "feeRecipient",
+          "sig": "feeRecipient()",
+          "selector": "0x46904840",
+          "type": "address",
+          "unit": ""
+        },
+        {
+          "name": "paused",
+          "sig": "paused()",
+          "selector": "0x5c975abb",
+          "type": "bool",
+          "unit": ""
+        }
+      ],
+      "events": [
+        {
+          "name": "StreamCreated",
+          "topic0": "0xa844bb0b1151841641a3ce5a94169e016356d1b1be5d6cace67723c5b9eeb173",
+          "counter": "streams"
+        }
+      ],
+      "sourcify": "https://repo.sourcify.dev/8453/0x2bB5b763a8A85e446909674177e65cb6F1052b4F"
+    },
+    {
+      "id": "g2a-subscriptions",
+      "title": "Subscriptions (recurring toll)",
+      "tag": "payments",
+      "what": "Recurring payments on the SAME factory \u2014 no new contract. A payer pre-approves a small allowance; each period a fresh vault is minted for the next window and pulled. A missed period is a HOLE, not a debt.",
+      "fee": "per-period fee to the merchant (live bps read from the factory)",
+      "start": "Open the page, see the live back-to-back periods already fired.",
+      "contract": "0x2bB5b763a8A85e446909674177e65cb6F1052b4F",
+      "role": "StreamFactory (reused)",
+      "source_file": "products/g2a-streams/KEY-RECORD.md",
+      "door": "get-paid",
+      "order": 2,
+      "entry": [
+        {
+          "sig": "createStream(address,address,uint256,uint64,uint64)",
+          "selector": "0x88379c90",
+          "role": "create",
+          "target": "self"
+        },
+        {
+          "sig": "predict(address,address,address,uint256,uint64,uint64)",
+          "selector": "0xce580c87",
+          "role": "predict",
+          "target": "self"
+        },
+        {
+          "sig": "withdraw()",
+          "selector": "0x3ccfd60b",
+          "role": "settle",
+          "target": "vault"
+        }
+      ],
+      "reads": [
+        {
+          "name": "owner",
+          "sig": "owner()",
+          "selector": "0x8da5cb5b",
+          "type": "address",
+          "unit": ""
+        },
+        {
+          "name": "feeBps",
+          "sig": "feeBps()",
+          "selector": "0x24a9d853",
+          "type": "uint256",
+          "unit": "bps"
+        },
+        {
+          "name": "maxFeeBps",
+          "sig": "MAX_FEE_BPS()",
+          "selector": "0xd55be8c6",
+          "type": "uint256",
+          "unit": "bps"
+        },
+        {
+          "name": "feeRecipient",
+          "sig": "feeRecipient()",
+          "selector": "0x46904840",
+          "type": "address",
+          "unit": ""
+        },
+        {
+          "name": "paused",
+          "sig": "paused()",
+          "selector": "0x5c975abb",
+          "type": "bool",
+          "unit": ""
+        }
+      ],
+      "events": [
+        {
+          "name": "StreamCreated",
+          "topic0": "0xa844bb0b1151841641a3ce5a94169e016356d1b1be5d6cace67723c5b9eeb173",
+          "counter": "laps"
+        }
+      ],
+      "keeper_task": "laps",
+      "sourcify": "https://repo.sourcify.dev/8453/0x2bB5b763a8A85e446909674177e65cb6F1052b4F"
+    },
+    {
+      "id": "f1a-payment-links",
+      "title": "Payment links",
+      "tag": "payments",
+      "what": "Create a payment request; you get a URL carrying a deposit address that auto-forwards to you. No account, no wallet, no code. The link is minted by the RequestRegistry and pays a forwarder derived from it.",
+      "fee": "500 bps on each forwarded payment (the P2 Registry's fee, paid by the forwarder it derives) \u2014 live value in the check below",
+      "start": "Open the page, create a request, share the link.",
+      "contract": "0x9651cD591cFe33E1b684e5d8541940e78724c749",
+      "role": "RequestRegistry",
+      "fee_contract": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8",
+      "source_file": "products/f1a-payment-links/DEPLOY-PREP.md",
+      "door": "get-paid",
+      "order": 1,
+      "entry": [
+        {
+          "sig": "request(address,address,uint256,bytes32)",
+          "selector": "0xdc0edd60",
+          "role": "request",
+          "target": "self"
+        }
+      ],
+      "reads": [
+        {
+          "name": "owner",
+          "sig": "owner()",
+          "selector": "0x8da5cb5b",
+          "type": "address",
+          "unit": ""
+        }
+      ],
+      "events": [
+        {
+          "name": "Settled",
+          "topic0": "0x115b3d29dcd7f3223f063dfa97c3cbbbf339c9ed64ed74670c8cd7ded3c3a98a",
+          "counter": "payments"
+        }
+      ]
+    },
+
+    {
+      "id": "sdk",
+      "title": "TypeScript SDK (@fleet/sdk)",
+      "tag": "build",
+      "what": "A tree-shakeable viem client: pure {to,data,value} calldata builders for every rail (quote/pay/createLink/createEscrow/release/setMandate/executeLap/swap/sweep/verify402) plus an EIP-712 signing seam. No state at import; addresses are data you pass in.",
+      "fee": "none of its own — the rail it calls charges the fee",
+      "start": "npm i @fleet/sdk; build calldata, simulate, send.",
+      "contract": null,
+      "deployed": false,
+      "note": "source only, not deployed",
+      "role": "TypeScript client (no contract)",
+      "source_file": "products/sdk/README.md",
+      "door": "build",
+      "order": 1,
+      "entry": [],
+      "reads": []
+    },
+    {
+      "id": "mcp-server",
+      "title": "MCP server (agent tools)",
+      "tag": "build",
+      "what": "One line of config gives an agent live, non-custodial rails on Base: one tool per product returns the calldata for the ONE money call and simulates it (dry-run by default) before anything is signed. No API key, no account.",
+      "fee": "none of its own — the rail it calls charges the fee",
+      "start": "Add the dex-fleet MCP server to any MCP client; call a tool.",
+      "contract": null,
+      "deployed": false,
+      "note": "source only, not deployed",
+      "role": "MCP server (no contract)",
+      "source_file": "products/mcp-server/README.md",
+      "door": "build",
+      "order": 2,
+      "entry": [],
+      "reads": []
+    },
+    {
+      "id": "x402",
+      "title": "x402 facilitator (on-chain 402 gate)",
+      "tag": "build",
+      "what": "The on-chain half of an HTTP-402 flow: a server returns 402, the client pays a rail, a gated writer records the settlement, and the server verifies it with a VIEW call then serves the resource. Nothing holds funds.",
+      "fee": "none — the rail that settled the payment charged its fee",
+      "start": "Read the reference server; wire verify() as the gate.",
+      "contract": null,
+      "deployed": false,
+      "note": "source only, not deployed",
+      "role": "x402Facilitator",
+      "source_file": "products/x402/README.md",
+      "door": "build",
+      "order": 3,
+      "entry": [
+        {
+          "sig": "verify(bytes32,address,address,uint256)",
+          "selector": "0x796e926d",
+          "role": "verify",
+          "target": "self"
+        }
+      ],
+      "reads": [
+        {
+          "name": "paid",
+          "sig": "paid(bytes32)",
+          "selector": "0xadd89bb2",
+          "type": "uint256",
+          "unit": "amount"
+        }
+      ]
+    },
+    {
+      "id": "settlement",
+      "title": "Settlement registry (read-side paid())",
+      "tag": "build",
+      "what": "A read-side mirror of a rail's settlement: a gated writer records paymentId -> (amount, at); anyone reads paid()/isPaid(). markPaid is idempotent, so an id can never silently change meaning.",
+      "fee": "none — read-side only",
+      "start": "Read paid(paymentId) or isPaid(paymentId) after a settle.",
+      "contract": null,
+      "deployed": false,
+      "note": "source only, not deployed",
+      "role": "SettlementRegistry",
+      "source_file": "products/settlement/src/SettlementRegistry.sol",
+      "door": "build",
+      "order": 4,
+      "entry": [
+        {
+          "sig": "paid(bytes32)",
+          "selector": "0xadd89bb2",
+          "role": "read",
+          "target": "self"
+        }
+      ],
+      "reads": [
+        {
+          "name": "isPaid",
+          "sig": "isPaid(bytes32)",
+          "selector": "0xfeef6640",
+          "type": "bool",
+          "unit": ""
+        }
+      ]
+    },
+    {
+      "id": "fleet-executor",
+      "title": "Fleet executor (EIP-7702 batch delegate)",
+      "tag": "build",
+      "what": "One installed EIP-7702 delegate drives every fleet surface from a single off-chain EIP-712 signature over a whole batch of (target,value,data) — so the user's own code runs in the user's frame, and any relayer can carry it.",
+      "fee": "none — per-sponsored-tx billing is the paymaster's, next door",
+      "start": "Sign the batch digest off-chain; a relayer calls execute().",
+      "contract": null,
+      "deployed": false,
+      "note": "source only, not deployed",
+      "role": "FleetExecutor",
+      "source_file": "products/fleet-executor/README.md",
+      "door": "build",
+      "order": 5,
+      "entry": [
+        {
+          "sig": "execute((address,uint256,bytes)[],uint256,uint256,bytes)",
+          "selector": "0x74b506ec",
+          "role": "execute",
+          "target": "self"
+        }
+      ],
+      "reads": [
+        {
+          "name": "nonceOf",
+          "sig": "nonceOf(address)",
+          "selector": "0x3f7b0c6a",
+          "type": "uint256",
+          "unit": ""
+        }
+      ]
+    },
+    {
+      "id": "fleet-paymaster",
+      "title": "Fleet paymaster (ERC-4337 sponsorship)",
+      "tag": "infra",
+      "what": "An ERC-4337 v0.7 verifying paymaster that sponsors UserOps calling a fleet contract and charges the sponsorship back as a small additive surcharge on the rail fee (sponsorBps, default 10) — not in ETH. Allow-list + per-sender rate limit.",
+      "fee": "sponsorBps default 10 bps, additive to the rail fee (owner-settable, cap 1000)",
+      "start": "previewSponsorFee(base) to see the surcharge; deposit() to fund.",
+      "contract": null,
+      "deployed": false,
+      "note": "source only, not deployed",
+      "role": "FleetPaymaster",
+      "source_file": "products/fleet-paymaster/README.md",
+      "door": "build",
+      "order": 6,
+      "entry": [
+        {
+          "sig": "previewSponsorFee(uint256)",
+          "selector": "0x23202bee",
+          "role": "preview",
+          "target": "self"
+        }
+      ],
+      "reads": []
+    },
+    {
+      "id": "g4c-toll-registry",
+      "title": "Toll registry (per-product toll lookup)",
+      "tag": "infra",
+      "what": "A constructor-set, per-chain lookup: product -> (recipient, feeBps, live) in ONE call, so a new product's toll is registered rather than re-derived. A consumer pins the registry's codehash; live=false reverts rather than falling back to a compiled default.",
+      "fee": "none — it reports other products' tolls",
+      "start": "Read toll(product); a consumer divides by the literal 10_000.",
+      "contract": null,
+      "deployed": false,
+      "note": "source only, not deployed",
+      "role": "TollRegistry",
+      "source_file": "products/g4c-toll-registry/README.md",
+      "door": "build",
+      "order": 7,
+      "entry": [
+        {
+          "sig": "toll(bytes32)",
+          "selector": "0x71a41241",
+          "role": "read",
+          "target": "self"
+        }
+      ],
+      "reads": [
+        {
+          "name": "isLive",
+          "sig": "isLive(bytes32)",
+          "selector": "0xcedd3a0e",
+          "type": "bool",
+          "unit": ""
+        }
+      ]
+    }
+  ],
+  "doors": [
+    {
+      "id": "get-paid",
+      "title": "Get paid",
+      "promise": "Payment links, subscriptions, streams, forwarder."
+    },
+    {
+      "id": "pay-safely",
+      "title": "Pay a stranger safely",
+      "promise": "Escrow and receipts."
+    },
+    {
+      "id": "build",
+      "title": "Build or automate",
+      "promise": "SDK, llms.txt, router, duster."
+    }
+  ]
+}

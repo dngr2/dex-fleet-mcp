@@ -1,0 +1,536 @@
+{
+  "name": "dex-fleet",
+  "description": "Non-custodial payment rails on Base (8453). Generated from products/mcp-server (A1).",
+  "chain": {
+    "name": "Base",
+    "id": 8453
+  },
+  "usdc": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+  "tools": [
+    {
+      "name": "create_pay_link",
+      "description": "Create a payment link: mint a request (f1a RequestRegistry) that yields a deposit address auto-forwarding to `destination`. Returns the on-chain call and the shareable link.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "destination": {
+            "type": [
+              "string",
+              "array",
+              "object"
+            ]
+          },
+          "token": {
+            "type": "string",
+            "default": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+          },
+          "amount": {
+            "type": "integer",
+            "default": 0
+          },
+          "memo": {
+            "type": [
+              "string",
+              "array",
+              "object"
+            ],
+            "default": ""
+          },
+          "dry_run": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "destination"
+        ]
+      },
+      "x-callee": "0x9651cD591cFe33E1b684e5d8541940e78724c749",
+      "x-calls": [
+        {
+          "sig": "request(address,address,uint256,bytes32)",
+          "selector": "0xdc0edd60"
+        }
+      ]
+    },
+    {
+      "name": "pay",
+      "description": "Register a personal deposit address (p2 Registry) that auto-forwards to `destination`. A payer then sends the token to that address. WARNs if read_fee wasn't called this session (fee is live state); pass expect_fee_bps to also flag a mismatch.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "destination": {
+            "type": [
+              "string",
+              "array",
+              "object"
+            ]
+          },
+          "dry_run": {
+            "type": "boolean",
+            "default": true
+          },
+          "expect_fee_bps": {
+            "type": "integer",
+            "default": -1
+          }
+        },
+        "required": [
+          "destination"
+        ]
+      },
+      "x-callee": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8",
+      "x-calls": [
+        {
+          "sig": "register(address)",
+          "selector": "0x4420e486"
+        },
+        {
+          "sig": "forward(address,address)",
+          "selector": "0x95ccf8bf"
+        }
+      ]
+    },
+    {
+      "name": "escrow_create",
+      "description": "Create an escrow (g2b) locked against a hashlock or arbiter; funds sit in the contract until release or refund.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "counterparty": {
+            "type": [
+              "string",
+              "array",
+              "object"
+            ]
+          },
+          "token": {
+            "type": "string",
+            "default": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+          },
+          "amount": {
+            "type": "integer",
+            "default": 0
+          },
+          "hashlock": {
+            "type": [
+              "string",
+              "array",
+              "object"
+            ],
+            "default": ""
+          },
+          "timeout": {
+            "type": "integer",
+            "default": 0
+          },
+          "dry_run": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "counterparty"
+        ]
+      },
+      "x-callee": "0x80793a7d35f735bc76BeAf22B1f413926818f410",
+      "x-calls": [
+        {
+          "sig": "create(address,address,uint256,bytes32,uint64)",
+          "selector": "0xa083c5e1"
+        }
+      ]
+    },
+    {
+      "name": "escrow_release",
+      "description": "Settle a g2b escrow: release(preimage) | refund() | arbiterRelease() | arbiterRefund(). Called on the ESCROW address, not the factory.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "escrow": {
+            "type": [
+              "string",
+              "array",
+              "object"
+            ]
+          },
+          "which": {
+            "type": [
+              "string",
+              "array",
+              "object"
+            ],
+            "default": "release"
+          },
+          "preimage": {
+            "type": [
+              "string",
+              "array",
+              "object"
+            ],
+            "default": ""
+          },
+          "dry_run": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "escrow"
+        ]
+      },
+      "x-callee": "0x80793a7d35f735bc76BeAf22B1f413926818f410",
+      "x-calls": [
+        {
+          "sig": "release(bytes32)",
+          "selector": "0x67d42a8b"
+        },
+        {
+          "sig": "refund()",
+          "selector": "0x590e1ae3"
+        },
+        {
+          "sig": "arbiterRelease()",
+          "selector": "0x04c3fa40"
+        },
+        {
+          "sig": "arbiterRefund()",
+          "selector": "0xd20c76f8"
+        }
+      ]
+    },
+    {
+      "name": "stream_create",
+      "description": "Create a payment stream (g2a): approve the factory, then createStream(recipient, token, amount, start, end); the recipient withdraw()s as it vests.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "recipient": {
+            "type": [
+              "string",
+              "array",
+              "object"
+            ]
+          },
+          "token": {
+            "type": "string",
+            "default": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+          },
+          "amount": {
+            "type": "integer",
+            "default": 0
+          },
+          "start": {
+            "type": "integer",
+            "default": 0
+          },
+          "end": {
+            "type": "integer",
+            "default": 0
+          },
+          "dry_run": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "recipient"
+        ]
+      },
+      "x-callee": "0x2bB5b763a8A85e446909674177e65cb6F1052b4F",
+      "x-calls": [
+        {
+          "sig": "approve(address,uint256)",
+          "selector": "0x095ea7b3"
+        },
+        {
+          "sig": "createStream(address,address,uint256,uint64,uint64)",
+          "selector": "0x88379c90"
+        }
+      ]
+    },
+    {
+      "name": "subscribe",
+      "description": "Subscribe (g2a): ONE bounded approve(factory, ticket*periods) is the whole mandate; a keeper calls createStreamFor per period. Revoke with approve(factory,0).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "payer": {
+            "type": [
+              "string",
+              "array",
+              "object"
+            ]
+          },
+          "recipient": {
+            "type": [
+              "string",
+              "array",
+              "object"
+            ]
+          },
+          "token": {
+            "type": "string",
+            "default": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+          },
+          "amount": {
+            "type": "integer",
+            "default": 0
+          },
+          "start": {
+            "type": "integer",
+            "default": 0
+          },
+          "end": {
+            "type": "integer",
+            "default": 0
+          },
+          "periods": {
+            "type": "integer",
+            "default": 1
+          },
+          "dry_run": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "payer",
+          "recipient"
+        ]
+      },
+      "x-callee": "0x2bB5b763a8A85e446909674177e65cb6F1052b4F",
+      "x-calls": [
+        {
+          "sig": "approve(address,uint256)",
+          "selector": "0x095ea7b3"
+        },
+        {
+          "sig": "createStreamFor(address,address,address,uint256,uint64,uint64)",
+          "selector": "0x2f7a1c66"
+        }
+      ]
+    },
+    {
+      "name": "swap",
+      "description": "Swap (p3 router). Hops are handed in; the router takes a 5 bps fee on INPUT to treasury. amount_out_min is your slippage guard.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "amount_in": {
+            "type": "integer"
+          },
+          "amount_out_min": {
+            "type": "integer"
+          },
+          "hops": {
+            "type": [
+              "string",
+              "array",
+              "object"
+            ]
+          },
+          "recipient": {
+            "type": [
+              "string",
+              "array",
+              "object"
+            ]
+          },
+          "deadline": {
+            "type": "integer",
+            "default": 0
+          },
+          "token_in": {
+            "type": [
+              "string",
+              "array",
+              "object"
+            ],
+            "default": ""
+          },
+          "dry_run": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "amount_in",
+          "amount_out_min",
+          "hops",
+          "recipient"
+        ]
+      },
+      "x-callee": "0xEB28D5cA0783D01dd2E4bF86AD7024ca156aB047",
+      "x-calls": [
+        {
+          "sig": "swapExactTokensForTokens((uint256,uint256,(uint8,address,address,uint24,bool,address,address)[],address,uint256))",
+          "selector": "0xd3bd0b52"
+        }
+      ]
+    },
+    {
+      "name": "sweep_dust",
+      "description": "Sweep dust to USDC (f1c). One tx: pull balances via Permit2, one-hop each token to USDC, deliver to you. Needs Permit2 approvals first.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "tokens": {
+            "type": [
+              "string",
+              "array",
+              "object"
+            ]
+          },
+          "hops": {
+            "type": [
+              "string",
+              "array",
+              "object"
+            ]
+          },
+          "min_out": {
+            "type": [
+              "string",
+              "array",
+              "object"
+            ]
+          },
+          "dry_run": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "tokens",
+          "hops",
+          "min_out"
+        ]
+      },
+      "x-callee": "0x5F6f5dee0c371ed13D9151B9C64d9fBf30245800",
+      "x-calls": [
+        {
+          "sig": "sweep(address[],(uint8,address,address,uint24,address)[],uint256[])",
+          "selector": "0xe7ea3ccb"
+        }
+      ]
+    },
+    {
+      "name": "sponsored_call",
+      "description": "Gasless call (g3a): sponsoredCall(target, data) \u2014 the relay pays gas, the actor EOA does not (EIP-7702 delegate).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": [
+              "string",
+              "array",
+              "object"
+            ]
+          },
+          "data": {
+            "type": [
+              "string",
+              "array",
+              "object"
+            ]
+          },
+          "dry_run": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "target",
+          "data"
+        ]
+      },
+      "x-callee": "0x83303e59d4F9798C3B49f9D4C6E522FfeC05f2A5",
+      "x-calls": [
+        {
+          "sig": "sponsoredCall(address,bytes)",
+          "selector": "0x4d7ffe7a"
+        }
+      ]
+    },
+    {
+      "name": "mint_receipt",
+      "description": "Mint the one proof-of-payment receipt NFT (g4b) for a SETTLED escrow, to the payer. Payable: send mintFeeWei.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "escrow": {
+            "type": [
+              "string",
+              "array",
+              "object"
+            ]
+          },
+          "dry_run": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "escrow"
+        ]
+      },
+      "x-callee": "0x6d140b934a06410a8C36eEe926c967467ab6d46f",
+      "x-calls": [
+        {
+          "sig": "mintForEscrow(address)",
+          "selector": "0xa98aeecb"
+        }
+      ]
+    },
+    {
+      "name": "read_fee",
+      "description": "Read live fee info for a product (or all). Fee getters are read on-chain; MAX_FEE_BPS is a DENOMINATOR on p3, never the take (GOTCHA #144).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "product": {
+            "type": [
+              "string",
+              "array",
+              "object"
+            ],
+            "default": ""
+          },
+          "dry_run": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "server_info",
+      "description": "Server + chain info: the product map, addresses (copied from PRODUCTS.json), and the published spec URL.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "dry_run": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "addresses": {
+    "miniapp": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8",
+    "p2-forwarder": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8",
+    "g2b-escrow": "0x80793a7d35f735bc76BeAf22B1f413926818f410",
+    "g3a-sponsorship": "0x83303e59d4F9798C3B49f9D4C6E522FfeC05f2A5",
+    "g4b-receipts": "0x6d140b934a06410a8C36eEe926c967467ab6d46f",
+    "p3-router": "0xEB28D5cA0783D01dd2E4bF86AD7024ca156aB047",
+    "f1c-duster": "0x5F6f5dee0c371ed13D9151B9C64d9fBf30245800",
+    "g2a-streams": "0x2bB5b763a8A85e446909674177e65cb6F1052b4F",
+    "g2a-subscriptions": "0x2bB5b763a8A85e446909674177e65cb6F1052b4F",
+    "f1a-payment-links": "0x9651cD591cFe33E1b684e5d8541940e78724c749"
+  },
+  "spec": "https://dngr2.github.io/dex-products/llms.txt"
+}
