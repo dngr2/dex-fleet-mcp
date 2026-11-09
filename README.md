@@ -7,6 +7,11 @@
 > **`plugins/` is GENERATED from this repo's `mcp-server` (AKA "A1").** Do not hand-edit it — run
 > `python3 plugins/gen.py`; the drift gate is `python3 plugins/verify.py` (44 checks). Generation is
 > what keeps the four framework front-doors from drifting off the agent protocol.
+>
+> **`catalog/` is a POINT-IN-TIME copy of the live spec (taken 2026-11-09), NOT a live fetch** — see
+> `catalog/README.md`. The gates are real but prove agreement with that snapshot, so a redeploy that
+> moves addresses can leave this repo green against a stale copy (GOTCHA #208). When addresses change,
+> bump `spec.py`'s pins **and** `catalog/` in the same commit, then re-push.
 
 # dex-fleet MCP server
 
