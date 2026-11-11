@@ -55,21 +55,45 @@ def _split_top(s: str) -> list[str]:
     return out
 
 
+def _split_array(typ: str) -> tuple[str, str]:
+    """Peel a trailing array suffix: `(a,b)[]` -> ('(a,b)', '[]'); `uint8[3]` -> ('uint8','[3]')."""
+    if typ.endswith("]"):
+        i = typ.rindex("[")
+        return typ[:i], typ[i:]
+    return typ, ""
+
+
+def _split_tuple(typ: str) -> list[str] | None:
+    """Component types of a tuple type `(a,b,(c,d)[])`, or None if not a tuple."""
+    if not (typ.startswith("(") and typ.endswith(")")):
+        return None
+    return _split_top(typ[1:-1])
+
+
 def _norm(typ: str, val):
-    """Normalise a user value into what eth_abi.encode expects."""
+    """Normalise a user value into what eth_abi.encode expects — RECURSING through tuples/arrays so
+    a nested `bytes` (e.g. the `execute((address,uint256,bytes)[])` sig) is converted too."""
     if val is None:
         return val
-    if typ == "address":
+    base, arr = _split_array(typ)
+    if arr:
+        return [_norm(base, v) for v in val]
+    comps = _split_tuple(base)
+    if comps is not None:
+        if isinstance(val, dict):
+            val = [val[c] for c in comps]
+        return [_norm(c, v) for c, v in zip(comps, val)]
+    if base == "address":
         return val if val.startswith("0x") else "0x" + val
-    if typ.startswith("bytes") and typ != "bytes":
+    if base.startswith("bytes") and base != "bytes":
         h = val[2:] if val.startswith("0x") else val
-        n = int(typ[5:])
+        n = int(base[5:])
         if len(h) > n * 2:
-            raise ValueError(f"{typ} too long: {val}")
+            raise ValueError(f"{base} too long: {val}")
         return bytes.fromhex(h.ljust(n * 2, "0"))
-    if typ == "bytes":
+    if base == "bytes":
         return bytes.fromhex(val[2:] if val.startswith("0x") else val)
-    if typ.startswith("uint") or typ.startswith("int") or typ == "bool":
+    if base.startswith("uint") or base.startswith("int") or base == "bool":
         return val
     return val
 
@@ -125,6 +149,49 @@ def decode_uint_addr(result_hex: str) -> tuple[int, str]:
 
 def decode_addr(result_hex: str) -> str:
     return "0x" + result_hex[2:][24:64]
+
+
+def decode_addrs(result_hex: str) -> list[str]:
+    """Every 32-byte word decoded as an address (word-aligned; for a multi-address return)."""
+    h = result_hex[2:]
+    return ["0x" + h[i + 24:i + 64] for i in range(0, len(h), 64) if len(h[i:i + 64]) == 64]
+
+
+def decode_uint_at(result_hex: str, word: int = 0) -> int:
+    """The `word`-th 32-byte uint from a hex return (0-indexed). Used to pull an id off a struct."""
+    h = result_hex[2:]
+    return int(h[word * 64:(word + 1) * 64], 16)
+
+
+def topic0(sig: str) -> str:
+    """The event topic0 = keccak of the canonical event signature — derived, never typed."""
+    return "0x" + keccak(text=sig).hex()
+
+
+def find_log(receipt: dict, address: str, topic0_hex: str) -> dict | None:
+    """First log in a receipt matching (emitting address, topic0), returned whole (topics + data).
+
+    Kept dependency-free (no ABI file): the caller indexes topics/data positionally."""
+    want = address.lower()
+    for lg in receipt.get("logs", []):
+        topics = lg.get("topics") or []
+        if (lg.get("address", "").lower() == want and topics
+                and topics[0].lower() == topic0_hex.lower()):
+            return lg
+    return None
+
+
+def rpc(method: str, params: list, rpc_url: str = DEFAULT_RPC, timeout: float = 20.0) -> dict:
+    """A generic read-only JSON-RPC call (eth_getTransactionReceipt, eth_getCode, …). Never raises."""
+    try:
+        r = httpx.post(rpc_url, json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
+                       timeout=timeout)
+        j = r.json()
+        if "error" in j:
+            return {"ok": False, "error": j["error"].get("message", str(j["error"]))}
+        return {"ok": True, "result": j.get("result")}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
 
 
 if __name__ == "__main__":

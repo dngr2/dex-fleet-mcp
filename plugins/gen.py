@@ -250,7 +250,10 @@ def _py_prelude(flavor: str) -> str:
         "    return {'tool': tool, 'to': to, 'sig': sig,\n"
         "            'selector': chain.selector(sig), 'data': chain.build_call(sig, args)}\n\n\n"
         "def _result(tool: str, calls: list) -> str:\n"
-        "    return json.dumps({'tool': tool, 'chain': {'id': spec.CHAIN_ID}, 'calls': calls}, indent=2)\n\n"
+        "    return json.dumps({'tool': tool, 'chain': {'id': spec.CHAIN_ID}, 'calls': calls}, indent=2)\n\n\n"
+        "def _json(o) -> str:\n"
+        "    # A1 appends a SECOND document (e.g. subscribe.revoke) as bare json.dumps; mirror it.\n"
+        "    return json.dumps(o, indent=2)\n\n"
     )
 
 
@@ -287,7 +290,42 @@ def _py_fn(name: str, d: dict, spec, flavor: str) -> str:
             f"    factory = spec.ADDR['{fac}']",
             f"    approve = _build_sig('{name}', 'approve(address,uint256)', token, [factory, {amt2}])",
             f"    create = _build_sig('{name}', '{sig2}', factory, {args2})",
-            f"    return _result('{name}', [approve, create])",
+        ]
+        if name == "subscribe":
+            # A1's subscribe ALSO appends a SECOND concatenated JSON doc (subscribe.revoke) carrying a
+            # THIRD leg — approve(v1_factory, 0). The revoke leg is NOT in the first doc's `calls`
+            # (which stays [approve, create]); it rides only in the second doc. Mirror both exactly, or
+            # A4 drops the migration revoke leg its own docstring promises.
+            body += [
+                "    _v1 = spec.V1_APPROVE_REVOKE[0]",
+                "    revoke = _build_sig('subscribe', _v1['sig'], "
+                "_addr(token), [_addr(_v1['to']), 0])",
+                "    return _result('subscribe', [approve, create]) + "
+                "_json({'tool': 'subscribe.revoke', 'calls': [revoke]})",
+            ]
+        else:
+            body.append(f"    return _result('{name}', [approve, create])")
+    elif name == "pay":
+        # A1's pay is a TWO-STEP: leg1 register(destination) on the Registry, leg2 transfer on the
+        # TOKEN. Mirror A1 server.py exactly (deposit_addr placeholder = zero when not supplied, which
+        # is A1's dry_run=False path — the caller substitutes leg1's return).
+        body = [
+            "    reg = spec.ADDR['p2-forwarder']",
+            "    c1 = _build_sig('pay', spec.CALLS['pay']['sigs'][0], reg, [_addr(destination)])",
+            "    dep = _addr(deposit_addr) if deposit_addr else '0x' + '00' * 20",
+            "    c2 = _build_sig('pay', spec.TRANSFER_SIG, _addr(token), [dep, int(amount)])",
+            "    return _result('pay', [c1, c2])",
+        ]
+    elif name == "sponsored_call":
+        # A1 target moved from g3a.sponsoredCall(target,data) to the FleetExecutor EIP-7702 delegate
+        # execute(calls,nonce,deadline,sig) ON THE AUTHORITY. Mirror server.py's body (to = authority
+        # when given, else the delegate address).
+        body = [
+            "    _to = _addr(authority) if authority else spec.ADDR['fleet-executor']",
+            "    _norm = [[_addr(c[0]), int(c[1]), c[2]] for c in _aslist(calls)]",
+            "    _args = [_norm, int(nonce) if nonce >= 0 else 0, int(deadline), sig or ('0x' + '00' * 65)]",
+            "    return _result('sponsored_call', "
+            "[_build_sig('sponsored_call', spec.CALLS['sponsored_call']['sigs'][0], _to, _args)])",
         ]
     else:
         body = [f"    return _result('{name}', [_build('{name}', {ARG_EXPR[name]})])"]
@@ -352,6 +390,7 @@ type Encode = (x: { sig: string; args: unknown[] }) => `0x${string}`;
 
 const ZERO32 = '0x' + '00'.repeat(32);
 const ZERO20 = '0x' + '00'.repeat(20);
+const ZERO65 = '0x' + '00'.repeat(65);
 
 // calldata is produced by a caller-supplied encoder so this file pulls no ABI dependency;
 // pass `encode({sig, args})` from your viem client (encodeFunctionData, abi = [sig]) — or leave it
@@ -484,8 +523,17 @@ def _ts_fn(name: str, d: dict, spec, tools) -> str:
             f"  const factory = ADDR['{fac}'];",
             f"  const approve = mkLeg(_addr(token), 'approve(address,uint256)', SEL_{name}_a, [factory, {amt2}]);",
             f"  const create = mkLeg(factory, {json.dumps(sig2)}, SEL_{name}_c, {args2});",
-            "  const legs: Leg[] = [approve, create];",
         ]
+        if name == "subscribe":
+            # A1 emits the v1-revoke as a SECOND concatenated doc; the TS flavor returns one Leg[],
+            # so append it here as a third leg (send only if an OLD v1 allowance is held).
+            _v1 = spec.V1_APPROVE_REVOKE[0]
+            seg += [
+                f"  const revoke = mkLeg(_addr(token), {json.dumps(_v1['sig'])}, {json.dumps(chain_sel(spec, _v1['sig']))}, [_addr({json.dumps(_v1['to'])}), 0n], 'send only if you hold an OLD v1 allowance');",
+                "  const legs: Leg[] = [approve, create, revoke];",
+            ]
+        else:
+            seg.append("  const legs: Leg[] = [approve, create];")
         sel_decl = (f"const SEL_{name}_a = {json.dumps(chain_sel(spec, 'approve(address,uint256)'))};\n"
                     f"const SEL_{name}_c = {json.dumps(chain_sel(spec, sig2))};")
     elif name == "swap":
@@ -502,13 +550,32 @@ def _ts_fn(name: str, d: dict, spec, tools) -> str:
             "                       'zero fee by design; approve Permit2 first')];",
         ]
         sel_decl = ""
+    elif name == "pay":
+        # A1 pay is TWO-STEP (register on the Registry, then transfer on the TOKEN) — mirror it exactly.
+        seg = [
+            f"  const reg = ADDR['p2-forwarder'];",
+            f"  const c1 = mkLeg(reg, {json.dumps(spec.CALLS['pay']['sigs'][0])}, {json.dumps(chain_sel(spec, spec.CALLS['pay']['sigs'][0]))}, [_addr(destination)]);",
+            f"  const dep = deposit_addr ? _addr(deposit_addr) : ZERO20;",
+            f"  const c2 = mkLeg(_addr(token), {json.dumps(spec.TRANSFER_SIG)}, {json.dumps(chain_sel(spec, spec.TRANSFER_SIG))}, [dep, _hexToBig(amount)]);",
+            "  const legs: Leg[] = [c1, c2];",
+        ]
+        sel_decl = ""
+    elif name == "sponsored_call":
+        # A1 target moved to the FleetExecutor EIP-7702 delegate: execute(calls,nonce,deadline,sig) ON
+        # THE AUTHORITY (to = authority when given, else the delegate).
+        sig0 = spec.CALLS['sponsored_call']['sigs'][0]
+        seg = [
+            f"  const to = authority ? _addr(authority) : ADDR['fleet-executor'];",
+            "  const norm = _aslist(calls).map((c: any) => [_addr(c[0]), BigInt(c[1] || 0), c[2]]);",
+            "  const args = [norm, nonce >= 0 ? BigInt(nonce) : 0n, BigInt(deadline), sig || ZERO65];",
+            f"  const legs: Leg[] = [mkLeg(to, {json.dumps(sig0)}, {json.dumps(chain_sel(spec, sig0))}, args)];",
+        ]
+        sel_decl = ""
     else:
         # simple one-leg tools
         args = {
             "create_pay_link": "[_addr(destination), _addr(token), _hexToBig(amount), _bytes32(memo)]",
-            "pay": "[_addr(destination)]",
             "escrow_create": "[_addr(counterparty), _addr(token), _hexToBig(amount), _bytes32(hashlock), _hexToBig(timeout)]",
-            "sponsored_call": "[_addr(target), data]",
             "mint_receipt": "[_addr(escrow)]",
         }[name]
         seg = [f"  const legs: Leg[] = [mkLeg(ADDR['{c['to']}'], {json.dumps(c['sigs'][0])}, {json.dumps(chain_sel(spec, c['sigs'][0]))}, {args})];"]
@@ -619,8 +686,14 @@ def main() -> int:
     # 2) the emitted ADDR map must be exactly the resolved map (no missing/extra/moved entry)
     if openai_obj["addresses"] != resolved:
         raise SystemExit("gen: tools.json addresses != resolved ADDR map")
-    # 3) membership: no address literal anywhere may be outside {resolved values} ∪ {USDC}
+    # 3) membership: no address literal anywhere may be outside {resolved values} ∪ {USDC} ∪ {deliberate
+    #    v1 constants}. The last set is NOT a blanket allow — it is exactly spec's own V1_* pins (the
+    #    old v1 factory the revoke leg targets, and V1_F1A), each a real deliberate literal.
     known = {a.lower() for a in resolved.values()} | {spec.USDC.lower()}
+    known |= {r["to"].lower() for r in getattr(spec, "V1_APPROVE_REVOKE", [])}
+    _v1f1a = getattr(spec, "V1_F1A", "")
+    if _v1f1a:
+        known.add(_v1f1a.lower())
     bad = []
     for rel, content in outputs.items():
         for lit in set(_re.findall(r"0x[0-9a-fA-F]{40}", content)):

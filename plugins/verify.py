@@ -83,18 +83,37 @@ CASES = {
              dict(amount_in=100, amount_out_min=90, hops=HOPS7, recipient=A, deadline=5, dry_run=False)),
     "sweep_dust": (dict(tokens=[A, B], hops=HOPS5, min_out=[1, 2], dry_run=False),
                    dict(tokens=[A, B], hops=HOPS5, min_out=[1, 2], dry_run=False)),
-    "sponsored_call": (dict(target=A, data="0xdeadbeef", dry_run=False),
-                       dict(target=A, data="0xdeadbeef", dry_run=False)),
+    "sponsored_call": (dict(calls=[[A, 0, "0xdeadbeef"]], dry_run=False),
+                       dict(calls=[[A, 0, "0xdeadbeef"]], dry_run=False)),
     "mint_receipt": (dict(escrow=A, dry_run=False), dict(escrow=A, dry_run=False)),
 }
+
+
+def _a1_docs(raw: str) -> list:
+    """A1 returns ONE json doc for most tools, but TWO concatenated docs for `subscribe`
+    (the second is `subscribe.revoke`). Split them without assuming json.loads sees the whole string."""
+    dec, i, out = json.JSONDecoder(), 0, []
+    while i < len(raw):
+        while i < len(raw) and raw[i] in " \t\r\n":
+            i += 1
+        if i >= len(raw):
+            break
+        obj, j = dec.raw_decode(raw, i)
+        out.append(obj)
+        i = j
+    return out
+
+
+def _a1_legs(raw: str) -> list:
+    """Every leg A1 emits, across ALL its docs (so a 2-doc tool still diffs 1:1 against a flattened
+    multi-leg consumer like the TS/crewai flavors)."""
+    return [c for d in _a1_docs(raw) for c in d.get("calls", [])]
 
 print("§1 generated calldata == A1's own server output")
 for name, (a1kw, a4kw) in CASES.items():
     import server  # A1's server module (imported once)
-    a1 = json.loads(getattr(server, name)(**a1kw))
-    a4 = json.loads(getattr(A4, name)(**a4kw))
-    a1_calls = a1["calls"]
-    a4_calls = a4["calls"]
+    a1_calls = _a1_legs(getattr(server, name)(**a1kw))  # ALL docs (subscribe emits 2)
+    a4_calls = _a1_legs(getattr(A4, name)(**a4kw))       # A4 mirrors the same concatenation
     if len(a1_calls) != len(a4_calls):
         bad(f"{name}: call count {len(a4_calls)} != A1 {len(a1_calls)}")
         continue
@@ -111,18 +130,34 @@ for name, (a1kw, a4kw) in CASES.items():
 print("§2 openai/tools.json selectors re-derive from A1 sig, callees match A1 addr")
 oj = json.load(open(os.path.join(HERE, "openai", "tools.json")))
 by_name = {t["name"]: t for t in oj["tools"]}
-for name, c in spec.CALLS.items():
-    t = by_name.get(name)
-    if not t:
-        bad(f"{name}: missing from tools.json")
+# NB: spec.CALLS is BROADER than the published set. It also carries five DELIBERATELY-unpublished
+# entries: the four read-only helpers (empty `sigs`) PLUS register_deposit_address (register-only
+# companion to `pay`). Assert over what is PUBLISHED, and pin the complement by name so a helper that
+# gains a sig — or a published tool that loses one — is caught, not silently skipped.
+UNPUBLISHED = {"resolve_pay_link", "register_deposit_address", "escrow_new_secret",
+               "quote_swap", "quote_sweep"}
+for name in by_name:
+    if name in ("read_fee", "server_info"):
+        continue
+    c = spec.CALLS.get(name)
+    if c is None:
+        bad(f"{name}: published tool with no spec.CALLS entry")
         continue
     want = [{"sig": s, "selector": selector(s)} for s in c["sigs"]]
-    if t.get("x-calls") != want:
-        bad(f"{name}: x-calls {t.get('x-calls')} != derived {want}")
-    elif t.get("x-callee") != spec.ADDR[c["to"]]:
-        bad(f"{name}: x-callee != A1 addr")
-    else:
-        ok(f"{name}: selector(s) + callee derived")
+    if t := by_name[name]:
+        if t.get("x-calls") != want:
+            bad(f"{name}: x-calls {t.get('x-calls')} != derived {want}")
+        elif t.get("x-callee") != spec.ADDR[c["to"]]:
+            bad(f"{name}: x-callee != A1 addr")
+        else:
+            ok(f"{name}: selector(s) + callee derived")
+_drift_set = set(spec.CALLS) - set(by_name)
+if _drift_set == UNPUBLISHED:
+    ok(f"{len(UNPUBLISHED)} deliberately-unpublished spec entr(ies) accounted for")
+else:
+    bad(f"unpublished-set drift: unexpected={sorted(_drift_set - UNPUBLISHED)} "
+        f"missing={sorted(UNPUBLISHED - _drift_set)}")
+
 
 print("§3 gen.py --check (files in sync with A1)")
 r = subprocess.run([sys.executable, os.path.join(HERE, "gen.py"), "--check"],
@@ -174,7 +209,13 @@ if lits and lits <= A1_SEL:
 else:
     bad(f"stray selector literal(s): {sorted(lits - A1_SEL)}")
 taddrs = set(re.findall(r"['\"](0x[0-9a-fA-F]{40})['\"]", ts))
+# allowed address literals = A1's ADDR map ∪ USDC ∪ the DELIBERATE v1 constants spec pins
+# (V1_APPROVE_REVOKE[].to is the PAUSED v1 factory the revoke leg targets; V1_F1A). Same allowlist
+# as gen.py's own guard, so the two guards agree and neither hides a real stale callee.
 A1_ADDR = set(spec.ADDR.values()) | {spec.USDC}
+A1_ADDR |= {r["to"] for r in getattr(spec, "V1_APPROVE_REVOKE", [])}
+if getattr(spec, "V1_F1A", ""):
+    A1_ADDR.add(spec.V1_F1A)
 if taddrs and taddrs <= A1_ADDR:
     ok(f"all {len(taddrs)} address literal(s) are A1 addrs")
 else:
@@ -248,7 +289,7 @@ out.stream_create=F.stream_create(A,USDC,7,1,2);
 out.subscribe=F.subscribe(A,B,USDC,3,1,2,4);
 out.swap=F.swap(100,90,HOPS7,A,5);
 out.sweep_dust=F.sweep_dust([A,B],HOPS5,[1,2]);
-out.sponsored_call=F.sponsored_call(A,'0xdeadbeef');
+out.sponsored_call=F.sponsored_call([[A,0,'0xdeadbeef']]);
 out.mint_receipt=F.mint_receipt(A);
 // keccak string-path vectors: the memo/hashlock coercion when handed a utf-8 string
 out.__kek={}; for (const s of ['', 'abc', 'hello world', 'invoice #42']) out.__kek[s]=F._bytes32(s);
@@ -292,13 +333,13 @@ else:
         else:
             legs = _flatten(json.loads(run.stdout))
             for name, (a1kw, _a4kw) in CASES.items():
-                a1 = json.loads(getattr(server, name)(**a1kw))
+                a1_calls = _a1_legs(getattr(server, name)(**a1kw))
                 got = legs[name]
                 drift = []
-                if len(got) != len(a1["calls"]):
-                    drift.append(f"leg count {len(got)} != A1 {len(a1['calls'])}")
+                if len(got) != len(a1_calls):
+                    drift.append(f"leg count {len(got)} != A1 {len(a1_calls)}")
                 else:
-                    for i, (g, x) in enumerate(zip(got, a1["calls"])):
+                    for i, (g, x) in enumerate(zip(got, a1_calls)):
                         # rebuild calldata from the TS-emitted args using A1's own encoder
                         try:
                             data = build_call(g["sig"], g["args"])
@@ -337,9 +378,9 @@ try:
     import fleet_tools as CREW  # noqa: E402
     cdrift = []
     for name, (a1kw, _a4kw) in CASES.items():
-        a1 = json.loads(getattr(server, name)(**a1kw))
-        cr = json.loads(getattr(CREW, name)(**_a4kw))
-        if [c.get("data") for c in cr["calls"]] != [c.get("data") for c in a1["calls"]]:
+        a1_calls = _a1_legs(getattr(server, name)(**a1kw))
+        cr_calls = _a1_legs(getattr(CREW, name)(**_a4kw))
+        if [c.get("data") for c in cr_calls] != [c.get("data") for c in a1_calls]:
             cdrift.append(name)
     if cdrift:
         bad("crewai flavor drift: " + ", ".join(cdrift))

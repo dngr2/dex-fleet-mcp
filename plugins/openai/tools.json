@@ -9,7 +9,7 @@
   "tools": [
     {
       "name": "create_pay_link",
-      "description": "Create a payment link: mint a request (f1a RequestRegistry) that yields a deposit address auto-forwarding to `destination`. Returns the on-chain call and the shareable link.",
+      "description": "Create a payment link: mint a request (f1a RequestRegistry) yielding a deposit address that auto-forwards to `destination`. Returns the on-chain call AND the shareable PAYER link (the real frontend route). Then `resolve_pay_link(txHash)` turns the receipt into the link if you didn't capture the return.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -45,7 +45,7 @@
           "destination"
         ]
       },
-      "x-callee": "0x9651cD591cFe33E1b684e5d8541940e78724c749",
+      "x-callee": "0x3d0e1aF04B3317CF9aeeeC45E43De92c34684041",
       "x-calls": [
         {
           "sig": "request(address,address,uint256,bytes32)",
@@ -55,7 +55,7 @@
     },
     {
       "name": "pay",
-      "description": "Register a personal deposit address (p2 Registry) that auto-forwards to `destination`. A payer then sends the token to that address. WARNs if read_fee wasn't called this session (fee is live state); pass expect_fee_bps to also flag a mismatch.",
+      "description": "PAY: the real two-step. Leg 1 register(destination) on the p2 Registry (mints your deposit address, idempotent per nonce); Leg 2 transfer(token, depositAddr, amount) on the TOKEN. Replace depositAddr with leg 1's return before sending leg 2. WARNs if read_fee wasn't called this session.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -65,6 +65,22 @@
               "array",
               "object"
             ]
+          },
+          "token": {
+            "type": "string",
+            "default": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+          },
+          "amount": {
+            "type": "integer",
+            "default": 0
+          },
+          "deposit_addr": {
+            "type": [
+              "string",
+              "array",
+              "object"
+            ],
+            "default": ""
           },
           "dry_run": {
             "type": "boolean",
@@ -79,21 +95,21 @@
           "destination"
         ]
       },
-      "x-callee": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8",
+      "x-callee": "0xaC13a6f51E886dDE81bB4692839987E6d41E1940",
       "x-calls": [
         {
           "sig": "register(address)",
           "selector": "0x4420e486"
         },
         {
-          "sig": "forward(address,address)",
-          "selector": "0x95ccf8bf"
+          "sig": "transfer(address,uint256)",
+          "selector": "0xa9059cbb"
         }
       ]
     },
     {
       "name": "escrow_create",
-      "description": "Create an escrow (g2b) locked against a hashlock or arbiter; funds sit in the contract until release or refund.",
+      "description": "Create an escrow (g2b) locked against a hashlock or arbiter; funds sit in the contract until release or refund. `hashlock` is ALREADY bytes32 \u2014 call escrow_new_secret() first and pass its `hashlock`; the matching `preimage` goes to escrow_release (never re-hash it).",
       "parameters": {
         "type": "object",
         "properties": {
@@ -133,7 +149,7 @@
           "counterparty"
         ]
       },
-      "x-callee": "0x80793a7d35f735bc76BeAf22B1f413926818f410",
+      "x-callee": "0x1826C89228f3A4D0ec8f437CFdd55a02D165F1ba",
       "x-calls": [
         {
           "sig": "create(address,address,uint256,bytes32,uint64)",
@@ -143,7 +159,7 @@
     },
     {
       "name": "escrow_release",
-      "description": "Settle a g2b escrow: release(preimage) | refund() | arbiterRelease() | arbiterRefund(). Called on the ESCROW address, not the factory.",
+      "description": "Settle a g2b escrow: release(preimage) | refund() | arbiterRelease() | arbiterRefund(). Called on the ESCROW address, not the factory. `preimage` is the RAW secret bytes32 (use escrow_new_secret); a plain string is keccak'd ONCE \u2014 the same way escrow_create hashes its hashlock string.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -179,7 +195,7 @@
           "escrow"
         ]
       },
-      "x-callee": "0x80793a7d35f735bc76BeAf22B1f413926818f410",
+      "x-callee": "0x1826C89228f3A4D0ec8f437CFdd55a02D165F1ba",
       "x-calls": [
         {
           "sig": "release(bytes32)",
@@ -237,7 +253,7 @@
           "recipient"
         ]
       },
-      "x-callee": "0x2bB5b763a8A85e446909674177e65cb6F1052b4F",
+      "x-callee": "0x8f26d7a5C89B6b8BE712346c5465b7F50e84fa19",
       "x-calls": [
         {
           "sig": "approve(address,uint256)",
@@ -251,7 +267,7 @@
     },
     {
       "name": "subscribe",
-      "description": "Subscribe (g2a): ONE bounded approve(factory, ticket*periods) is the whole mandate; a keeper calls createStreamFor per period. Revoke with approve(factory,0).",
+      "description": "Subscribe (g2a): approve(factory_v2, ticket*periods) then createStreamFor on the v2 StreamFactory. Includes a `revoke` leg against the PAUSED v1 factory \u2014 send it if you granted the old allowance before the migration. A keeper then fires createStreamFor once per period.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -299,7 +315,7 @@
           "recipient"
         ]
       },
-      "x-callee": "0x2bB5b763a8A85e446909674177e65cb6F1052b4F",
+      "x-callee": "0x8f26d7a5C89B6b8BE712346c5465b7F50e84fa19",
       "x-calls": [
         {
           "sig": "approve(address,uint256)",
@@ -361,7 +377,7 @@
           "recipient"
         ]
       },
-      "x-callee": "0xEB28D5cA0783D01dd2E4bF86AD7024ca156aB047",
+      "x-callee": "0x3962846445C386294B98a7770AF17192cb159447",
       "x-calls": [
         {
           "sig": "swapExactTokensForTokens((uint256,uint256,(uint8,address,address,uint24,bool,address,address)[],address,uint256))",
@@ -407,7 +423,7 @@
           "min_out"
         ]
       },
-      "x-callee": "0x5F6f5dee0c371ed13D9151B9C64d9fBf30245800",
+      "x-callee": "0x4B360a122969ecd726336AdafCf13714F37BF6f1",
       "x-calls": [
         {
           "sig": "sweep(address[],(uint8,address,address,uint24,address)[],uint256[])",
@@ -417,23 +433,40 @@
     },
     {
       "name": "sponsored_call",
-      "description": "Gasless call (g3a): sponsoredCall(target, data) \u2014 the relay pays gas, the actor EOA does not (EIP-7702 delegate).",
+      "description": "SIGNED-INTENT batch on the FleetExecutor EIP-7702 delegate (the authority signs EIP-712 off-chain; ANY relayer carries it, paying the gas, while the authority's own frame runs the calls). Calls are (target,value,data). If you omit nonce/deadline/sig you get the digest() to sign; call digest() on the AUTHORITY address.",
       "parameters": {
         "type": "object",
         "properties": {
-          "target": {
+          "calls": {
             "type": [
               "string",
               "array",
               "object"
             ]
           },
-          "data": {
+          "nonce": {
+            "type": "integer",
+            "default": -1
+          },
+          "deadline": {
+            "type": "integer",
+            "default": 0
+          },
+          "sig": {
             "type": [
               "string",
               "array",
               "object"
-            ]
+            ],
+            "default": ""
+          },
+          "authority": {
+            "type": [
+              "string",
+              "array",
+              "object"
+            ],
+            "default": ""
           },
           "dry_run": {
             "type": "boolean",
@@ -441,15 +474,14 @@
           }
         },
         "required": [
-          "target",
-          "data"
+          "calls"
         ]
       },
-      "x-callee": "0x83303e59d4F9798C3B49f9D4C6E522FfeC05f2A5",
+      "x-callee": "0x8943793970d2B29180A1B30166c0e326Bc94d2D4",
       "x-calls": [
         {
-          "sig": "sponsoredCall(address,bytes)",
-          "selector": "0x4d7ffe7a"
+          "sig": "execute((address,uint256,bytes)[],uint256,uint256,bytes)",
+          "selector": "0x74b506ec"
         }
       ]
     },
@@ -475,7 +507,7 @@
           "escrow"
         ]
       },
-      "x-callee": "0x6d140b934a06410a8C36eEe926c967467ab6d46f",
+      "x-callee": "0x5F02a21C63A1115D49456F440EF69FBd57a61580",
       "x-calls": [
         {
           "sig": "mintForEscrow(address)",
@@ -521,16 +553,21 @@
     }
   ],
   "addresses": {
-    "miniapp": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8",
-    "p2-forwarder": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8",
-    "g2b-escrow": "0x80793a7d35f735bc76BeAf22B1f413926818f410",
-    "g3a-sponsorship": "0x83303e59d4F9798C3B49f9D4C6E522FfeC05f2A5",
-    "g4b-receipts": "0x6d140b934a06410a8C36eEe926c967467ab6d46f",
-    "p3-router": "0xEB28D5cA0783D01dd2E4bF86AD7024ca156aB047",
-    "f1c-duster": "0x5F6f5dee0c371ed13D9151B9C64d9fBf30245800",
-    "g2a-streams": "0x2bB5b763a8A85e446909674177e65cb6F1052b4F",
-    "g2a-subscriptions": "0x2bB5b763a8A85e446909674177e65cb6F1052b4F",
-    "f1a-payment-links": "0x9651cD591cFe33E1b684e5d8541940e78724c749"
+    "miniapp": "0xaC13a6f51E886dDE81bB4692839987E6d41E1940",
+    "p2-forwarder": "0xaC13a6f51E886dDE81bB4692839987E6d41E1940",
+    "g2b-escrow": "0x1826C89228f3A4D0ec8f437CFdd55a02D165F1ba",
+    "g3a-sponsorship": "0xb8381fF6b76726e989a7FFF358dBc3640d78d684",
+    "g4b-receipts": "0x5F02a21C63A1115D49456F440EF69FBd57a61580",
+    "p3-router": "0x3962846445C386294B98a7770AF17192cb159447",
+    "f1c-duster": "0x4B360a122969ecd726336AdafCf13714F37BF6f1",
+    "g2a-streams": "0x8f26d7a5C89B6b8BE712346c5465b7F50e84fa19",
+    "g2a-subscriptions": "0x8f26d7a5C89B6b8BE712346c5465b7F50e84fa19",
+    "f1a-payment-links": "0x3d0e1aF04B3317CF9aeeeC45E43De92c34684041",
+    "x402": "0xED79DE434D2a2633EedD95890E35637f0d41AEb3",
+    "settlement": "0x773b19856D3B477A071323B726c7f72DbB5B6e48",
+    "fleet-executor": "0x8943793970d2B29180A1B30166c0e326Bc94d2D4",
+    "fleet-paymaster": "0x51B6c98a857E19FBC5C3f85b04D28E8f91c54426",
+    "g4c-toll-registry": "0x39019ECf94A54EB9D62e7cBc1bB66724aA1db70a"
   },
   "spec": "https://dngr2.github.io/dex-products/llms.txt"
 }

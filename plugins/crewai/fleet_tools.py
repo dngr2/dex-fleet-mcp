@@ -82,24 +82,36 @@ def _build_sig(tool: str, sig: str, to: str, args: list) -> dict:
 def _result(tool: str, calls: list) -> str:
     return json.dumps({'tool': tool, 'chain': {'id': spec.CHAIN_ID}, 'calls': calls}, indent=2)
 
+
+def _json(o) -> str:
+    # A1 appends a SECOND document (e.g. subscribe.revoke) as bare json.dumps; mirror it.
+    return json.dumps(o, indent=2)
+
 _D_create_pay_link_token = spec.USDC
 _D_create_pay_link_amount = 0
 _D_create_pay_link_memo = ''
 _D_create_pay_link_dry_run = True
 @_fw_decorator
 def create_pay_link(destination, token=_D_create_pay_link_token, amount=_D_create_pay_link_amount, memo=_D_create_pay_link_memo, dry_run=_D_create_pay_link_dry_run) -> str:
-    """Create a payment link: mint a request (f1a RequestRegistry) that yields a deposit address auto-forwarding to `destination`. Returns the on-chain call and the shareable link.
+    """Create a payment link: mint a request (f1a RequestRegistry) yielding a deposit address that auto-forwards to `destination`. Returns the on-chain call AND the shareable PAYER link (the real frontend route). Then `resolve_pay_link(txHash)` turns the receipt into the link if you didn't capture the return.
 
-callee: 0x9651cD591cFe33E1b684e5d8541940e78724c749"""
+callee: 0x3d0e1aF04B3317CF9aeeeC45E43De92c34684041"""
     return _result('create_pay_link', [_build('create_pay_link', [destination, token, int(amount), _memo(memo)])])
+_D_pay_token = spec.USDC
+_D_pay_amount = 0
+_D_pay_deposit_addr = ''
 _D_pay_dry_run = True
 _D_pay_expect_fee_bps = -1
 @_fw_decorator
-def pay(destination, dry_run=_D_pay_dry_run, expect_fee_bps=_D_pay_expect_fee_bps) -> str:
-    """Register a personal deposit address (p2 Registry) that auto-forwards to `destination`. A payer then sends the token to that address. WARNs if read_fee wasn't called this session (fee is live state); pass expect_fee_bps to also flag a mismatch.
+def pay(destination, token=_D_pay_token, amount=_D_pay_amount, deposit_addr=_D_pay_deposit_addr, dry_run=_D_pay_dry_run, expect_fee_bps=_D_pay_expect_fee_bps) -> str:
+    """PAY: the real two-step. Leg 1 register(destination) on the p2 Registry (mints your deposit address, idempotent per nonce); Leg 2 transfer(token, depositAddr, amount) on the TOKEN. Replace depositAddr with leg 1's return before sending leg 2. WARNs if read_fee wasn't called this session.
 
-callee: 0xe9515881fe6976eD9CB55328B8308F6eF7c311a8"""
-    return _result('pay', [_build('pay', [destination])])
+callee: 0xaC13a6f51E886dDE81bB4692839987E6d41E1940"""
+    reg = spec.ADDR['p2-forwarder']
+    c1 = _build_sig('pay', spec.CALLS['pay']['sigs'][0], reg, [_addr(destination)])
+    dep = _addr(deposit_addr) if deposit_addr else '0x' + '00' * 20
+    c2 = _build_sig('pay', spec.TRANSFER_SIG, _addr(token), [dep, int(amount)])
+    return _result('pay', [c1, c2])
 _D_escrow_create_token = spec.USDC
 _D_escrow_create_amount = 0
 _D_escrow_create_hashlock = ''
@@ -107,18 +119,18 @@ _D_escrow_create_timeout = 0
 _D_escrow_create_dry_run = True
 @_fw_decorator
 def escrow_create(counterparty, token=_D_escrow_create_token, amount=_D_escrow_create_amount, hashlock=_D_escrow_create_hashlock, timeout=_D_escrow_create_timeout, dry_run=_D_escrow_create_dry_run) -> str:
-    """Create an escrow (g2b) locked against a hashlock or arbiter; funds sit in the contract until release or refund.
+    """Create an escrow (g2b) locked against a hashlock or arbiter; funds sit in the contract until release or refund. `hashlock` is ALREADY bytes32 — call escrow_new_secret() first and pass its `hashlock`; the matching `preimage` goes to escrow_release (never re-hash it).
 
-callee: 0x80793a7d35f735bc76BeAf22B1f413926818f410"""
+callee: 0x1826C89228f3A4D0ec8f437CFdd55a02D165F1ba"""
     return _result('escrow_create', [_build('escrow_create', [counterparty, token, int(amount), _hash(hashlock), int(timeout)])])
 _D_escrow_release_which = 'release'
 _D_escrow_release_preimage = ''
 _D_escrow_release_dry_run = True
 @_fw_decorator
 def escrow_release(escrow, which=_D_escrow_release_which, preimage=_D_escrow_release_preimage, dry_run=_D_escrow_release_dry_run) -> str:
-    """Settle a g2b escrow: release(preimage) | refund() | arbiterRelease() | arbiterRefund(). Called on the ESCROW address, not the factory.
+    """Settle a g2b escrow: release(preimage) | refund() | arbiterRelease() | arbiterRefund(). Called on the ESCROW address, not the factory. `preimage` is the RAW secret bytes32 (use escrow_new_secret); a plain string is keccak'd ONCE — the same way escrow_create hashes its hashlock string.
 
-callee: 0x80793a7d35f735bc76BeAf22B1f413926818f410  (factory shown; the call targets the per-deal ESCROW address)"""
+callee: 0x1826C89228f3A4D0ec8f437CFdd55a02D165F1ba  (factory shown; the call targets the per-deal ESCROW address)"""
     _WHICH = {"release": "release(bytes32)", "refund": "refund()",
               "arbiterRelease": "arbiterRelease()", "arbiterRefund": "arbiterRefund()"}
     sig = _WHICH[which]
@@ -133,7 +145,7 @@ _D_stream_create_dry_run = True
 def stream_create(recipient, token=_D_stream_create_token, amount=_D_stream_create_amount, start=_D_stream_create_start, end=_D_stream_create_end, dry_run=_D_stream_create_dry_run) -> str:
     """Create a payment stream (g2a): approve the factory, then createStream(recipient, token, amount, start, end); the recipient withdraw()s as it vests.
 
-callee: 0x2bB5b763a8A85e446909674177e65cb6F1052b4F"""
+callee: 0x8f26d7a5C89B6b8BE712346c5465b7F50e84fa19"""
     factory = spec.ADDR['g2a-streams']
     approve = _build_sig('stream_create', 'approve(address,uint256)', token, [factory, int(amount)])
     create = _build_sig('stream_create', 'createStream(address,address,uint256,uint64,uint64)', factory, [recipient, token, int(amount), int(start), int(end)])
@@ -146,13 +158,15 @@ _D_subscribe_periods = 1
 _D_subscribe_dry_run = True
 @_fw_decorator
 def subscribe(payer, recipient, token=_D_subscribe_token, amount=_D_subscribe_amount, start=_D_subscribe_start, end=_D_subscribe_end, periods=_D_subscribe_periods, dry_run=_D_subscribe_dry_run) -> str:
-    """Subscribe (g2a): ONE bounded approve(factory, ticket*periods) is the whole mandate; a keeper calls createStreamFor per period. Revoke with approve(factory,0).
+    """Subscribe (g2a): approve(factory_v2, ticket*periods) then createStreamFor on the v2 StreamFactory. Includes a `revoke` leg against the PAUSED v1 factory — send it if you granted the old allowance before the migration. A keeper then fires createStreamFor once per period.
 
-callee: 0x2bB5b763a8A85e446909674177e65cb6F1052b4F"""
+callee: 0x8f26d7a5C89B6b8BE712346c5465b7F50e84fa19"""
     factory = spec.ADDR['g2a-subscriptions']
     approve = _build_sig('subscribe', 'approve(address,uint256)', token, [factory, int(amount) * int(periods)])
     create = _build_sig('subscribe', 'createStreamFor(address,address,address,uint256,uint64,uint64)', factory, [payer, recipient, token, int(amount), int(start), int(end)])
-    return _result('subscribe', [approve, create])
+    _v1 = spec.V1_APPROVE_REVOKE[0]
+    revoke = _build_sig('subscribe', _v1['sig'], _addr(token), [_addr(_v1['to']), 0])
+    return _result('subscribe', [approve, create]) + _json({'tool': 'subscribe.revoke', 'calls': [revoke]})
 _D_swap_deadline = 0
 _D_swap_token_in = ''
 _D_swap_dry_run = True
@@ -160,28 +174,35 @@ _D_swap_dry_run = True
 def swap(amount_in, amount_out_min, hops, recipient, deadline=_D_swap_deadline, token_in=_D_swap_token_in, dry_run=_D_swap_dry_run) -> str:
     """Swap (p3 router). Hops are handed in; the router takes a 5 bps fee on INPUT to treasury. amount_out_min is your slippage guard.
 
-callee: 0xEB28D5cA0783D01dd2E4bF86AD7024ca156aB047"""
+callee: 0x3962846445C386294B98a7770AF17192cb159447"""
     return _result('swap', [_build('swap', [[int(amount_in), int(amount_out_min), _hops7(hops), recipient, int(deadline)]])])
 _D_sweep_dust_dry_run = True
 @_fw_decorator
 def sweep_dust(tokens, hops, min_out, dry_run=_D_sweep_dust_dry_run) -> str:
     """Sweep dust to USDC (f1c). One tx: pull balances via Permit2, one-hop each token to USDC, deliver to you. Needs Permit2 approvals first.
 
-callee: 0x5F6f5dee0c371ed13D9151B9C64d9fBf30245800"""
+callee: 0x4B360a122969ecd726336AdafCf13714F37BF6f1"""
     return _result('sweep_dust', [_build('sweep_dust', [_tokens(tokens), _hops5(hops), [int(x) for x in _aslist(min_out)]])])
+_D_sponsored_call_nonce = -1
+_D_sponsored_call_deadline = 0
+_D_sponsored_call_sig = ''
+_D_sponsored_call_authority = ''
 _D_sponsored_call_dry_run = True
 @_fw_decorator
-def sponsored_call(target, data, dry_run=_D_sponsored_call_dry_run) -> str:
-    """Gasless call (g3a): sponsoredCall(target, data) — the relay pays gas, the actor EOA does not (EIP-7702 delegate).
+def sponsored_call(calls, nonce=_D_sponsored_call_nonce, deadline=_D_sponsored_call_deadline, sig=_D_sponsored_call_sig, authority=_D_sponsored_call_authority, dry_run=_D_sponsored_call_dry_run) -> str:
+    """SIGNED-INTENT batch on the FleetExecutor EIP-7702 delegate (the authority signs EIP-712 off-chain; ANY relayer carries it, paying the gas, while the authority's own frame runs the calls). Calls are (target,value,data). If you omit nonce/deadline/sig you get the digest() to sign; call digest() on the AUTHORITY address.
 
-callee: 0x83303e59d4F9798C3B49f9D4C6E522FfeC05f2A5"""
-    return _result('sponsored_call', [_build('sponsored_call', [target, data])])
+callee: 0x8943793970d2B29180A1B30166c0e326Bc94d2D4"""
+    _to = _addr(authority) if authority else spec.ADDR['fleet-executor']
+    _norm = [[_addr(c[0]), int(c[1]), c[2]] for c in _aslist(calls)]
+    _args = [_norm, int(nonce) if nonce >= 0 else 0, int(deadline), sig or ('0x' + '00' * 65)]
+    return _result('sponsored_call', [_build_sig('sponsored_call', spec.CALLS['sponsored_call']['sigs'][0], _to, _args)])
 _D_mint_receipt_dry_run = True
 @_fw_decorator
 def mint_receipt(escrow, dry_run=_D_mint_receipt_dry_run) -> str:
     """Mint the one proof-of-payment receipt NFT (g4b) for a SETTLED escrow, to the payer. Payable: send mintFeeWei.
 
-callee: 0x6d140b934a06410a8C36eEe926c967467ab6d46f"""
+callee: 0x5F02a21C63A1115D49456F440EF69FBd57a61580"""
     return _result('mint_receipt', [_build('mint_receipt', [escrow])])
 
 def read_fee(product: str = "") -> str:

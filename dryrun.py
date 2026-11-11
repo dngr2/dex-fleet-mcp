@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+import json
 import os
 import sys
 
@@ -29,21 +30,27 @@ HOP_R = [1, DEX, USDC, 500, True, DEX, FACTORY]  # router hop: +stable,+factory
 
 def run_all(dry_run: bool = True) -> int:
     """Call each tool once. Returns the number of tools called. Used by selftest."""
+    secret = json.loads(S.escrow_new_secret())
     calls = [
         lambda: S.create_pay_link(destination=DEST, amount=5_000_000, memo="invoice-42", dry_run=dry_run),
-        lambda: S.pay(destination=DEST, dry_run=dry_run),
-        lambda: S.escrow_create(counterparty=DEST, amount=10_000_000, hashlock="0x" + "11" * 32,
-                                timeout=1_800_000_000, dry_run=dry_run),
+        lambda: S.resolve_pay_link(tx_hash="0x" + "ab" * 32),
+        lambda: S.register_deposit_address(destination=DEST, dry_run=dry_run),
+        lambda: S.pay(destination=DEST, amount=5_000_000, dry_run=dry_run),
+        lambda: S.escrow_create(counterparty=DEST, amount=10_000_000,
+                                hashlock=secret["hashlock"], timeout=1_800_000_000, dry_run=dry_run),
+        lambda: S.escrow_new_secret(),
         lambda: S.escrow_release(escrow="0x" + "22" * 20, which="release",
-                                 preimage="0x" + "33" * 32, dry_run=dry_run),
+                                 preimage=secret["preimage"], dry_run=dry_run),
         lambda: S.stream_create(recipient=DEST, amount=100_000_000, start=1_700_000_000,
                                 end=1_700_086_400, dry_run=dry_run),
         lambda: S.subscribe(payer=SIM_FROM, recipient="0x" + "44" * 20, amount=1_000_000,
                             start=1_700_000_000, end=1_700_086_400, periods=12, dry_run=dry_run),
         lambda: S.swap(amount_in=1_000_000, amount_out_min=990_000, hops=[HOP_R],
                        recipient=DEST, dry_run=dry_run),
+        lambda: S.quote_swap(hops=[[DEX, USDC, 500]], amount_in=1_000_000, dry_run=dry_run),
         lambda: S.sweep_dust(tokens=[DEX], hops=[HOP_D], min_out=[990_000], dry_run=dry_run),
-        lambda: S.sponsored_call(target=DEST, data="0x12345678", dry_run=dry_run),
+        lambda: S.quote_sweep(tokens=[DEX], hops=[HOP_D], dry_run=dry_run),
+        lambda: S.sponsored_call(calls=[[DEST, 0, "0x12345678"]], dry_run=dry_run),
         lambda: S.mint_receipt(escrow="0x" + "55" * 20, dry_run=dry_run),
         lambda: S.read_fee(),           # always live (its own RPC)
         lambda: S.server_info(),
@@ -65,4 +72,4 @@ if __name__ == "__main__":
     dry = "--nosim" not in sys.argv
     print(f"# dryrun: simulate={dry}  (mcp will be launched WITHOUT python3 -I)\n")
     k = run_all(dry_run=dry)
-    print(f"# called {k}/12 tools")
+    print(f"# called {k}/17 tools")

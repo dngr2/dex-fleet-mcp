@@ -5,21 +5,26 @@
 > `spec.py`, copied from the vendored `catalog/PRODUCTS.json` — never retyped.
 >
 > **`plugins/` is GENERATED from this repo's `mcp-server` (AKA "A1").** Do not hand-edit it — run
-> `python3 plugins/gen.py`; the drift gate is `python3 plugins/verify.py` (44 checks). Generation is
-> what keeps the four framework front-doors from drifting off the agent protocol.
+> `python3 plugins/gen.py`; the drift gate is `python3 plugins/verify.py`. Generation is what keeps
+> the four framework front-doors from drifting off the agent protocol.
 >
-> **`catalog/` is a POINT-IN-TIME copy of the live spec (taken 2026-11-09), NOT a live fetch** — see
-> `catalog/README.md`. The gates are real but prove agreement with that snapshot, so a redeploy that
-> moves addresses can leave this repo green against a stale copy (GOTCHA #208). When addresses change,
-> bump `spec.py`'s pins **and** `catalog/` in the same commit, then re-push.
+> **`catalog/` is a POINT-IN-TIME copy of the live spec (taken 2026-11-11), NOT a live fetch** — see
+> `catalog/README.md`. The gates prove agreement with that snapshot, so a redeploy that moves
+> addresses can leave this repo green against a stale copy (GOTCHA #208). When addresses change, bump
+> `spec.py`'s pins **and** `catalog/` in the same commit, then re-push.
 
 # dex-fleet MCP server
 
 **An agent gets live, non-custodial payment rails on Base in one line of config. No API key, no account, no server holding funds.**
 
-This is a thin, read-only MCP wrapper over the nine live fleet products. Each tool builds the exact
-calldata for the product's ONE money verb and, by default, **simulates it** (`eth_call`) so the agent
-sees the result before anything is signed. Nothing here signs or broadcasts — a wallet layer does that.
+This is a thin, read-only MCP wrapper over the live fleet products — the nine money rails plus five
+read-only helpers. Each tool builds the exact calldata for the product's ONE money verb and, by
+default, **simulates it** (`eth_call`) so the agent sees the result before anything is signed.
+Nothing here signs or broadcasts — a wallet layer does that.
+
+**Addresses track the LIVE v2 line** (Base): the v2.1 g2a StreamFactory `0x8f26d7a5…fa19`, the v2
+g2b EscrowFactory / p2 Registry / p3 Router / f1a RequestRegistry. `subscribe` also returns a
+`revoke` leg against the **PAUSED** v1 factory so a pre-migration allowance can be cleared.
 
 Spec: <https://dngr2.github.io/dex-products/llms.txt> · catalog: <https://dngr2.github.io/dex-products/PRODUCTS.json>
 
@@ -40,15 +45,20 @@ Deps: `mcp`, `eth_abi`, `eth_utils`, `httpx` (all already present in this enviro
 
 | tool | product | does |
 |---|---|---|
-| `create_pay_link` | f1a-payment-links | mint a request → deposit address + shareable link |
-| `pay` | p2-forwarder | register a personal auto-forward deposit address |
+| `create_pay_link` | f1a-payment-links | mint a request → deposit address + shareable PAYER link |
+| `resolve_pay_link` | f1a-payment-links | READ a receipt → real link (if you didn't capture the return) |
+| `register_deposit_address` | p2-forwarder | register-only: your personal auto-forward deposit address |
+| `pay` | p2-forwarder | the real two-step: register(destination) then transfer(token, deposit, amount) |
 | `escrow_create` | g2b-escrow | lock funds against a hashlock/arbiter |
+| `escrow_new_secret` | g2b-escrow | OFFLINE: fresh {preimage, hashlock} — pass hashlock to create, preimage to release |
 | `escrow_release` | g2b-escrow (instance) | release / refund / arbiterRelease / arbiterRefund |
 | `stream_create` | g2a-streams | approve + createStream (vesting payment) |
-| `subscribe` | g2a-subscriptions | one bounded approve = the whole mandate |
+| `subscribe` | g2a-subscriptions | one bounded approve = the whole mandate (+ v1 revoke leg) |
 | `swap` | p3-router | swapExactTokensForTokens (hops handed in) |
+| `quote_swap` | p3-router | READ: UniV3 amountOut per hop + fee → pick amount_out_min |
 | `sweep_dust` | f1c-duster | funnel scattered dust → USDC in one tx |
-| `sponsored_call` | g3a-sponsorship | gasless call (relay pays gas, EIP-7702) |
+| `quote_sweep` | f1c-duster | READ: same quote, zero-fee duster → minOut |
+| `sponsored_call` | fleet-executor | signed-intent EIP-7702 batch (relay pays gas) |
 | `mint_receipt` | g4b-receipts | mint the proof-of-payment NFT for a settled escrow |
 | `read_fee` | all | **live** fee per contract |
 | `server_info` | — | product map, addresses, spec URL |
@@ -75,6 +85,6 @@ python3 dryrun.py --nosim    # build calldata only, offline
 |---|---|
 | `chain.py` | selector + ABI encoding + one read-only `eth_call` (offline-tolerant; a dead RPC is an ERROR, never a silent 0) |
 | `spec.py` | the ONE pin point: addresses COPIED from `PRODUCTS.json` (GOTCHA #73), sig strings verbatim from `llms.txt` |
-| `server.py` | the MCPServer + 12 tools |
+| `server.py` | the MCPServer + 17 tools |
 | `dryrun.py` | call every tool once |
 | `selftest.py` | drift gate |
