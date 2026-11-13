@@ -5,20 +5,35 @@
     "id": 8453,
     "explorer": "https://basescan.org"
   },
-  "treasury": "0xe218E382F28A094f9f64E903ee3cb1750A7f204B",
+  "treasury": "0x5c0fc0917260A0656D253f1625053e3E6Dd2Ef3c",
   "products": [
     {
       "id": "miniapp",
       "title": "Pay in-feed (Farcaster / Base mini app)",
       "tag": "payments",
+      "status": "live",
       "what": "A pay link inside a Farcaster cast or Base mini app: tap, pay USDC on Base, receipt in the thread. The deposit address is derived live from the P2 Registry's predict(), and the fee is read live on-chain.",
       "fee": "500 bps on each forwarded payment (the P2 Registry's fee, paid by the forwarder the link derives) \u2014 live value in the check below",
       "start": "Open the mini app, paste or make a pay link, tap Pay.",
-      "contract": "0xaC13a6f51E886dDE81bB4692839987E6d41E1940",
-      "chains": [8453, 10, 42161, 59144, 137, 56, 204, 5000, 100, 534352],
-      "chains_note": "`contract` above is the BASE v2 (audit-fix) address — redeployed 2026-11-09, Base ONLY. The v1 Registry 0xe9515881fe6976eD9CB55328B8308F6eF7c311a8 stays live on Base, and the other 9 chains still carry the v1 address (v2 is Base-only); never key on the bare string (GOTCHA #95). verify.mjs live-checks the BASE `contract`.",
+      "contract": "0x417c41d406c61E09958032Cd77338fc1F1ac7D45",
+      "supersedes": [
+        "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8"
+      ],
+      "live_at": {
+        "8453": "0x417c41d406c61E09958032Cd77338fc1F1ac7D45",
+        "10": "0x417c41d406c61E09958032Cd77338fc1F1ac7D45",
+        "130": "0x417c41d406c61E09958032Cd77338fc1F1ac7D45",
+        "42161": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8",
+        "59144": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8",
+        "137": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8",
+        "56": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8",
+        "5000": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8",
+        "204": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8",
+        "100": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8",
+        "534352": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8"
+      },
       "role": "P2 Registry (the mini app derives its deposit address)",
-      "source_file": "products/miniapp/.well-known/farcaster.json",
+      "source_file": "products/miniapp/README.md",
       "door": "get-paid",
       "order": 1,
       "entry": [
@@ -50,12 +65,27 @@
       "id": "p2-forwarder",
       "title": "Micro-payment forwarder",
       "tag": "payments",
+      "status": "live",
       "what": "Register once, get a personal deposit address. Anything sent there auto-forwards to YOUR destination within ~1 block.",
       "fee": "500 bps on each forwarded payment \u2014 live value in the check below",
       "start": "Open the page, register a destination, share the address it gives you.",
-      "contract": "0xaC13a6f51E886dDE81bB4692839987E6d41E1940",
-      "chains": [8453, 10, 42161, 59144, 137, 56, 204, 5000, 100, 534352],
-      "chains_note": "`contract` above is the BASE v2 (audit-fix) address — redeployed 2026-11-09, Base ONLY. The v1 Registry 0xe9515881fe6976eD9CB55328B8308F6eF7c311a8 stays live on Base, and the other 9 chains still carry the v1 address (v2 is Base-only); never key on the bare string (GOTCHA #95). verify.mjs live-checks the BASE `contract`.",
+      "contract": "0x417c41d406c61E09958032Cd77338fc1F1ac7D45",
+      "supersedes": [
+        "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8"
+      ],
+      "live_at": {
+        "8453": "0x417c41d406c61E09958032Cd77338fc1F1ac7D45",
+        "10": "0x417c41d406c61E09958032Cd77338fc1F1ac7D45",
+        "130": "0x417c41d406c61E09958032Cd77338fc1F1ac7D45",
+        "42161": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8",
+        "59144": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8",
+        "137": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8",
+        "56": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8",
+        "5000": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8",
+        "204": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8",
+        "100": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8",
+        "534352": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8"
+      },
       "role": "Registry (integrator entry point)",
       "source_file": "products/p2-forwarder/KEY-RECORD.md",
       "door": "get-paid",
@@ -118,12 +148,25 @@
       "id": "g2b-escrow",
       "title": "Escrow as a service",
       "tag": "payments",
+      "status": "live",
       "what": "Lock a token amount against a hashlock or a nominated arbiter, share the escrow address, counterparty releases it \u2014 or the payer refunds after the timeout. Funds sit in the escrow contract, never a server.",
       "fee": "500 bps on release only, nothing on refund \u2014 live value in the check below",
       "start": "Open the page, create a deal, share the escrow link.",
-      "contract": "0x1826C89228f3A4D0ec8f437CFdd55a02D165F1ba",
-      "chains": [8453, 10, 204, 100, 534352],
-      "chains_note": "`contract` above is the BASE v2 (audit-fix) address — redeployed 2026-11-09, Base ONLY. The v1 factory 0x80793a7d35f735bc76BeAf22B1f413926818f410 stays live on Base and is still the factory on optimism; opBNB/gnosis/scroll carry 0x715114076a45c0102Ae3cb38Bcb89B3211ce591f (7794 B, same runtime). verify.mjs live-checks the BASE `contract`.",
+      "contract": "0x4B05fA6aD0Ba0D0120Dce19Ce34dde6d1316C237",
+      "supersedes": [
+        "0x80793a7d35f735bc76BeAf22B1f413926818f410"
+      ],
+      "far_line": [
+        "0x715114076a45c0102Ae3cb38Bcb89B3211ce591f"
+      ],
+      "live_at": {
+        "8453": "0x4B05fA6aD0Ba0D0120Dce19Ce34dde6d1316C237",
+        "10": "0x4B05fA6aD0Ba0D0120Dce19Ce34dde6d1316C237",
+        "130": "0x4B05fA6aD0Ba0D0120Dce19Ce34dde6d1316C237",
+        "204": "0x715114076a45c0102Ae3cb38Bcb89B3211ce591f",
+        "100": "0x715114076a45c0102Ae3cb38Bcb89B3211ce591f",
+        "534352": "0x715114076a45c0102Ae3cb38Bcb89B3211ce591f"
+      },
       "role": "EscrowFactory (the only contract a user calls)",
       "source_file": "products/g2b-escrow/MAINNET-LIVE.md",
       "door": "pay-safely",
@@ -192,41 +235,19 @@
           "counter": "escrows"
         }
       ],
-      "sourcify": "https://repo.sourcify.dev/8453/0x1826C89228f3A4D0ec8f437CFdd55a02D165F1ba"
-    },
-    {
-      "id": "g3a-sponsorship",
-      "title": "Gas sponsorship (meta-tx relay)",
-      "tag": "infra",
-      "what": "A merchant integrates us; their users transact gaslessly via an EIP-7702 relay. The user acts, OUR relay pays the gas \u2014 the actor/payer split is the whole product.",
-      "fee": "per-sponsored-tx fee to the merchant (>= 1.5x gas floor)",
-      "start": "Read a real sponsored tx on the page: type-4 shape, delegated EOA, actor != payer.",
-      "contract": "0xb8381fF6b76726e989a7FFF358dBc3640d78d684",
-      "role": "SponsorTarget (the 7702 delegate code)",
-      "source_file": "products/g3a-sponsorship/MAINNET-ADDRS.txt",
-      "door": "build",
-      "order": 3,
-      "entry": [
-        {
-          "sig": "sponsoredCall(address,bytes)",
-          "selector": "0x4d7ffe7a",
-          "role": "sponsor",
-          "target": "self"
-        }
-      ],
-      "reads": [],
-      "events": []
+      "sourcify": "https://repo.sourcify.dev/8453/0x4B05fA6aD0Ba0D0120Dce19Ce34dde6d1316C237"
     },
     {
       "id": "g4b-receipts",
       "title": "Receipt NFT (proof-of-payment)",
       "tag": "payments",
+      "status": "live",
       "what": "When a g2b escrow settles, anyone may mint exactly one on-chain receipt NFT to the payer. Fully on-chain tokenURI (base64 JSON) \u2014 no server, no IPFS.",
       "fee": "mintFeeWei = 50000000000000 wei (0.00005 ETH) live; free at deploy \u2014 live value in the check below",
       "fee_sel": "0x06220534",
       "fee_unit": "wei",
       "start": "Open the page, paste a settled escrow, mint the receipt.",
-      "contract": "0x5F02a21C63A1115D49456F440EF69FBd57a61580",
+      "contract": "0xAE5951d25FEDD06aB7e124e91Dac3AC20f5e7cAF",
       "role": "ReceiptNFT (ERC-721)",
       "source_file": "products/g4b-receipts/EVIDENCE-mainnet-deploy.md",
       "door": "pay-safely",
@@ -269,18 +290,34 @@
           "counter": "receipts"
         }
       ],
-      "sourcify": "https://repo.sourcify.dev/8453/0x5F02a21C63A1115D49456F440EF69FBd57a61580"
+      "sourcify": "https://repo.sourcify.dev/8453/0xAE5951d25FEDD06aB7e124e91Dac3AC20f5e7cAF"
     },
     {
       "id": "p3-router",
       "title": "Slippage-bounded swap router",
       "tag": "trading",
+      "status": "live",
       "what": "An on-chain router that aggregates existing Uniswap V3 + Aerodrome pools (holds no liquidity of its own). Quotes are chosen off-chain; the contract executes the hops it is handed.",
-      "fee": "5 bps on input, to the treasury",
+      "fee": "500 bps (5%) on input, to the treasury \u2014 immutable in the contract",
       "start": "Open the page, see the per-chain address set and a real quote.",
-      "contract": "0x3962846445C386294B98a7770AF17192cb159447",
-      "chains": [8453, 10, 42161, 59144, 137, 56, 204, 5000, 100, 534352],
-      "chains_note": "NOT chain-invariant: this `contract` is the BASE v2 (audit-fix) router — redeployed 2026-11-09, Base ONLY. The v1 Base router 0xEB28D5cA0783D01dd2E4bF86AD7024ca156aB047 stays live; the other 9 chains still carry the v1 router at 0x9651cD591cFe33E1b684e5d8541940e78724c749 (4270 B, unchanged). ⚠ the bare string 0x9651cD591cFe33E1b684e5d8541940e78724c749 on BASE is f1a's RequestRegistry (2772 B), a DIFFERENT contract — never key on the bare string (GOTCHA #95).",
+      "contract": "0x036645cA607Dc8075Ae9B12A3474C00A82c306e6",
+      "supersedes": [
+        "0xEB28D5cA0783D01dd2E4bF86AD7024ca156aB047",
+        "0x9651cD591cFe33E1b684e5d8541940e78724c749"
+      ],
+      "live_at": {
+        "8453": "0x036645cA607Dc8075Ae9B12A3474C00A82c306e6",
+        "10": "0x036645cA607Dc8075Ae9B12A3474C00A82c306e6",
+        "130": "0x036645cA607Dc8075Ae9B12A3474C00A82c306e6",
+        "42161": "0x9651cD591cFe33E1b684e5d8541940e78724c749",
+        "59144": "0x9651cD591cFe33E1b684e5d8541940e78724c749",
+        "137": "0x9651cD591cFe33E1b684e5d8541940e78724c749",
+        "56": "0x9651cD591cFe33E1b684e5d8541940e78724c749",
+        "5000": "0x9651cD591cFe33E1b684e5d8541940e78724c749",
+        "204": "0x9651cD591cFe33E1b684e5d8541940e78724c749",
+        "100": "0x9651cD591cFe33E1b684e5d8541940e78724c749",
+        "534352": "0x9651cD591cFe33E1b684e5d8541940e78724c749"
+      },
       "role": "Router (Base mainnet)",
       "source_file": "products/p3-router/KEY-RECORD-MAINNET.md",
       "door": "build",
@@ -322,10 +359,14 @@
       "id": "f1c-duster",
       "title": "Dust funnel (dust -> USDC)",
       "tag": "acquisition",
+      "status": "live",
       "what": "Connect a wallet, see scattered dust balances, one click sweeps them to USDC on Base. Non-custodial, stateless contract.",
       "fee": "ZERO fee by design (acquisition funnel)",
       "start": "Open the page, connect, sweep.",
-      "contract": "0x4B360a122969ecd726336AdafCf13714F37BF6f1",
+      "contract": "0x8c38c2bbECa7575c24ACEf1d907Aa1F4f43CbFB9",
+      "supersedes": [
+        "0x5f6f5dee0c371ed13d9151b9c64d9fbf30245800"
+      ],
       "role": "DustSweeper",
       "source_file": "products/f1c-duster/KEY-RECORD.md",
       "door": "build",
@@ -345,12 +386,26 @@
       "id": "g2a-streams",
       "title": "Payment streams",
       "tag": "payments",
+      "status": "live",
       "what": "Create a streaming payment: a vault drips a token to a recipient over time; the recipient withdraws whatever has vested, permissionlessly.",
       "fee": "500 bps, charged only on withdraw \u2014 live value in the check below",
       "start": "Open the page, create a stream or view a live one.",
-      "contract": "0x8f26d7a5C89B6b8BE712346c5465b7F50e84fa19",
-      "chains": [8453, 10, 204, 100, 534352],
-      "chains_note": "`contract` above is the BASE v2.1 (dead-drop-fix) factory — deployed 2026-11-10, Base ONLY. v2.1 adds receive()/fallback()/rescue(onlyOwner) + a self-funded create, so a bare send to it is no longer stranded. The superseded v2 0x14bBd99B840a0Bf087b21A31e27BA83B45f958a0 and v1 0x2bB5b763a8A85e446909674177e65cb6F1052b4F stay live on Base (v1 PAUSED; it still holds the existing streams); optimism/opBNB/gnosis/scroll are unchanged (optimism 0x61AB1942a6779D392922cfcd20BA6D7dc36FDe15; opBNB/gnosis/scroll 0xAdB743dA4A5419C62BCc2cF027da6478Ae70f228). ⚠ on arb/polygon/mantle the string 0x61AB1942 holds a DIFFERENT 5143 B contract (an Aave-style vault) that reverts feeBps() — g2a is NOT there (GOTCHA #95). verify.mjs live-checks the BASE `contract`.",
+      "contract": "0x3882A049ee99B96Ea68DF317713ed76008b9A075",
+      "supersedes": [
+        "0x14bBd99B840a0Bf087b21A31e27BA83B45f958a0",
+        "0x2bB5b763a8A85e446909674177e65cb6F1052b4F"
+      ],
+      "far_line": [
+        "0xAdB743dA4A5419C62BCc2cF027da6478Ae70f228"
+      ],
+      "live_at": {
+        "8453": "0x3882A049ee99B96Ea68DF317713ed76008b9A075",
+        "10": "0x3882A049ee99B96Ea68DF317713ed76008b9A075",
+        "130": "0x3882A049ee99B96Ea68DF317713ed76008b9A075",
+        "204": "0xAdB743dA4A5419C62BCc2cF027da6478Ae70f228",
+        "100": "0xAdB743dA4A5419C62BCc2cF027da6478Ae70f228",
+        "534352": "0xAdB743dA4A5419C62BCc2cF027da6478Ae70f228"
+      },
       "role": "StreamFactory (Base mainnet)",
       "source_file": "products/g2a-streams/KEY-RECORD.md",
       "door": "get-paid",
@@ -419,18 +474,32 @@
           "counter": "streams"
         }
       ],
-      "sourcify": "https://repo.sourcify.dev/8453/0x8f26d7a5C89B6b8BE712346c5465b7F50e84fa19"
+      "sourcify": "https://repo.sourcify.dev/8453/0x3882A049ee99B96Ea68DF317713ed76008b9A075"
     },
     {
       "id": "g2a-subscriptions",
       "title": "Subscriptions (recurring toll)",
       "tag": "payments",
+      "status": "live",
       "what": "Recurring payments on the SAME factory \u2014 no new contract. A payer pre-approves a small allowance; each period a fresh vault is minted for the next window and pulled. A missed period is a HOLE, not a debt.",
       "fee": "per-period fee to the merchant (live bps read from the factory)",
       "start": "Open the page, see the live back-to-back periods already fired.",
-      "contract": "0x8f26d7a5C89B6b8BE712346c5465b7F50e84fa19",
-      "chains": [8453, 10, 204, 100, 534352],
-      "chains_note": "Same factory as g2a-streams (reused) — the BASE v2.1 address, Base ONLY (see g2a-streams' chains_note for the per-chain set + the 0x61AB1942 collision).",
+      "contract": "0x3882A049ee99B96Ea68DF317713ed76008b9A075",
+      "supersedes": [
+        "0x14bBd99B840a0Bf087b21A31e27BA83B45f958a0",
+        "0x2bB5b763a8A85e446909674177e65cb6F1052b4F"
+      ],
+      "far_line": [
+        "0xAdB743dA4A5419C62BCc2cF027da6478Ae70f228"
+      ],
+      "live_at": {
+        "8453": "0x3882A049ee99B96Ea68DF317713ed76008b9A075",
+        "10": "0x3882A049ee99B96Ea68DF317713ed76008b9A075",
+        "130": "0x3882A049ee99B96Ea68DF317713ed76008b9A075",
+        "204": "0xAdB743dA4A5419C62BCc2cF027da6478Ae70f228",
+        "100": "0xAdB743dA4A5419C62BCc2cF027da6478Ae70f228",
+        "534352": "0xAdB743dA4A5419C62BCc2cF027da6478Ae70f228"
+      },
       "role": "StreamFactory (reused)",
       "source_file": "products/g2a-streams/KEY-RECORD.md",
       "door": "get-paid",
@@ -500,18 +569,22 @@
         }
       ],
       "keeper_task": "laps",
-      "sourcify": "https://repo.sourcify.dev/8453/0x8f26d7a5C89B6b8BE712346c5465b7F50e84fa19"
+      "sourcify": "https://repo.sourcify.dev/8453/0x3882A049ee99B96Ea68DF317713ed76008b9A075"
     },
     {
       "id": "f1a-payment-links",
       "title": "Payment links",
       "tag": "payments",
+      "status": "live",
       "what": "Create a payment request; you get a URL carrying a deposit address that auto-forwards to you. No account, no wallet, no code. The link is minted by the RequestRegistry and pays a forwarder derived from it.",
       "fee": "500 bps on each forwarded payment (the P2 Registry's fee, paid by the forwarder it derives) \u2014 live value in the check below",
       "start": "Open the page, create a request, share the link.",
-      "contract": "0x3d0e1aF04B3317CF9aeeeC45E43De92c34684041",
+      "contract": "0xeD395024Bba719564bec617b6b42CF6fDC8a252c",
+      "supersedes": [
+        "0x9651cD591cFe33E1b684e5d8541940e78724c749"
+      ],
       "role": "RequestRegistry",
-      "fee_contract": "0xaC13a6f51E886dDE81bB4692839987E6d41E1940",
+      "fee_contract": "0x417c41d406c61E09958032Cd77338fc1F1ac7D45",
       "source_file": "products/f1a-payment-links/DEPLOY-PREP.md",
       "door": "get-paid",
       "order": 1,
@@ -544,6 +617,7 @@
       "id": "sdk",
       "title": "TypeScript SDK (@fleet/sdk)",
       "tag": "build",
+      "status": "source-only",
       "what": "A tree-shakeable viem client: pure {to,data,value} calldata builders for every rail (quote/pay/createLink/createEscrow/release/setMandate/executeLap/swap/sweep/verify402) plus an EIP-712 signing seam. No state at import; addresses are data you pass in.",
       "fee": "none of its own \u2014 the rail it calls charges the fee",
       "start": "npm i @fleet/sdk; build calldata, simulate, send.",
@@ -561,6 +635,7 @@
       "id": "mcp-server",
       "title": "MCP server (agent tools)",
       "tag": "build",
+      "status": "source-only",
       "what": "One line of config gives an agent live, non-custodial rails on Base: one tool per product returns the calldata for the ONE money call and simulates it (dry-run by default) before anything is signed. No API key, no account.",
       "fee": "none of its own \u2014 the rail it calls charges the fee",
       "start": "Add the dex-fleet MCP server to any MCP client; call a tool.",
@@ -578,10 +653,11 @@
       "id": "x402",
       "title": "x402 facilitator (on-chain 402 gate)",
       "tag": "build",
+      "status": "live",
       "what": "The on-chain half of an HTTP-402 flow: a server returns 402, the client pays a rail, a gated writer records the settlement, and the server verifies it with a VIEW call then serves the resource. Nothing holds funds.",
       "fee": "none \u2014 the rail that settled the payment charged its fee",
       "start": "Read the reference server; wire verify() as the gate.",
-      "contract": "0xED79DE434D2a2633EedD95890E35637f0d41AEb3",
+      "contract": "0x5849eF6f21fDC21d5194c24ED6c824965A613739",
       "deployed": true,
       "note": "live on Base",
       "role": "x402Facilitator",
@@ -610,10 +686,11 @@
       "id": "settlement",
       "title": "Settlement registry (read-side paid())",
       "tag": "build",
+      "status": "live",
       "what": "A read-side mirror of a rail's settlement: a gated writer records paymentId -> (amount, at); anyone reads paid()/isPaid(). markPaid is idempotent, so an id can never silently change meaning.",
       "fee": "none \u2014 read-side only",
       "start": "Read paid(paymentId) or isPaid(paymentId) after a settle.",
-      "contract": "0x773b19856D3B477A071323B726c7f72DbB5B6e48",
+      "contract": "0xdDA0728Ff635B555D2Af471E2821055bE08F9127",
       "deployed": true,
       "note": "live on Base",
       "role": "SettlementRegistry",
@@ -642,10 +719,11 @@
       "id": "fleet-executor",
       "title": "Fleet executor (EIP-7702 batch delegate)",
       "tag": "build",
+      "status": "live",
       "what": "One installed EIP-7702 delegate drives every fleet surface from a single off-chain EIP-712 signature over a whole batch of (target,value,data) \u2014 so the user's own code runs in the user's frame, and any relayer can carry it.",
       "fee": "none \u2014 per-sponsored-tx billing is the paymaster's, next door",
       "start": "Sign the batch digest off-chain; a relayer calls execute().",
-      "contract": "0x8943793970d2B29180A1B30166c0e326Bc94d2D4",
+      "contract": "0x410396662089a26C801c54818CCd59640eFCaf77",
       "deployed": true,
       "note": "live on Base",
       "role": "FleetExecutor",
@@ -664,7 +742,7 @@
         {
           "name": "nonceOf",
           "sig": "nonceOf(address)",
-          "selector": "0x3f7b0c6a",
+          "selector": "0xed2a2d64",
           "type": "uint256",
           "unit": ""
         }
@@ -674,10 +752,11 @@
       "id": "fleet-paymaster",
       "title": "Fleet paymaster (ERC-4337 sponsorship)",
       "tag": "infra",
+      "status": "live",
       "what": "An ERC-4337 v0.7 verifying paymaster that sponsors UserOps calling a fleet contract and charges the sponsorship back as a small additive surcharge on the rail fee (sponsorBps, default 10) \u2014 not in ETH. Allow-list + per-sender rate limit. The allow-list is a DECLARATION gate: word 0 of the op's callData is trusted, so a sponsored op can still call a non-listed contract. Rate limit is OFF by default (maxOpsPerWindow == 0 = unlimited).",
       "fee": "sponsorBps default 10 bps, additive to the rail fee, paid in the RAIL TOKEN not ETH. Owner-settable up to a compiled-in MAX_SPONSOR_BPS = 1000 (10%); lowering it needs a redeploy (constant, no setter). COMBINED worst case = rail fee (<=500 bps) + sponsorBps (<=1000 bps) = 1500 bps (15%); at defaults = 500+10 = 510 bps (5.1%).",
       "start": "previewSponsorFee(base) to see the surcharge; deposit() to fund (permissionless). Live but was UNFUNDED and UNCONFIGURED at deploy: call deposit() then setAllowedTarget(rail,true) or nothing is sponsored (AA31 until funded; NotAllowedCall until allow-listed).",
-      "contract": "0x51B6c98a857E19FBC5C3f85b04D28E8f91c54426",
+      "contract": "0x70A615dDc4cd013Cf4D569Ae3394bF4465229B95",
       "deployed": true,
       "note": "live on Base (funded + allow-listed 2026-11-10; stake not yet posted)",
       "role": "FleetPaymaster",
@@ -698,10 +777,11 @@
       "id": "g4c-toll-registry",
       "title": "Toll registry (per-product toll lookup)",
       "tag": "infra",
+      "status": "live",
       "what": "A constructor-set, per-chain lookup: product -> (recipient, feeBps, live) in ONE call, so a new product's toll is registered rather than re-derived. A consumer pins the registry's codehash; live=false reverts rather than falling back to a compiled default.",
       "fee": "none \u2014 it reports other products' tolls",
       "start": "Read toll(product); a consumer divides by the literal 10_000.",
-      "contract": "0x39019ECf94A54EB9D62e7cBc1bB66724aA1db70a",
+      "contract": "0xc8319D6fbc0A8f1685Df9c567557141A289b7A1b",
       "deployed": true,
       "note": "live on Base",
       "role": "TollRegistry",

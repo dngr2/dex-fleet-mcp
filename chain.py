@@ -11,6 +11,7 @@ No signing, no keys, no web3 session object. Pure encode + one RPC POST.
 from __future__ import annotations
 
 import json
+import os
 
 import httpx
 from eth_abi import encode as abi_encode
@@ -18,6 +19,15 @@ from eth_abi import decode as abi_decode
 from eth_utils import keccak
 
 DEFAULT_RPC = "https://base-rpc.publicnode.com"
+# Fallback list, tried in order, ONLY after an endpoint returns a non-JSON body or an RPC error. A
+# single default endpoint is a SPOF: publicnode answers "Rate limit (1200rqs/60s)" with a plain-text
+# body that parses as a JSONDecodeError and reads on the surface like "the contract reverted". Order
+# is the same every call, so behavior stays reproducible; override with MCP_RPC (comma-separated).
+_RPCS = [u for u in os.environ.get("MCP_RPC", "").split(",") if u] or [
+    DEFAULT_RPC,
+    "https://mainnet.base.org",
+    "https://base.llamarpc.com",
+]
 CHAIN_ID = 8453
 
 
@@ -108,6 +118,16 @@ def build_call(sig: str, args: list) -> str:
     return selector(sig) + enc.hex()
 
 
+def _walk(rpc: str = DEFAULT_RPC) -> list[str]:
+    """Endpoints to try: the caller's `rpc` first if it is NOT the default, else the default chain.
+
+    `rpc` defaults to DEFAULT_RPC; when a caller passes an explicit URL it stays a single try or a
+    one-element list (their choice is honored, no silent substitution)."""
+    if rpc and rpc != DEFAULT_RPC:
+        return [rpc]
+    return _RPCS
+
+
 def eth_call(to: str, data: str, rpc: str = DEFAULT_RPC, timeout: float = 12.0,
              frm: str | None = None) -> dict:
     """Read-only eth_call. Returns {'ok': bool, 'result'|'error': ...} — never raises on RPC.
@@ -115,22 +135,27 @@ def eth_call(to: str, data: str, rpc: str = DEFAULT_RPC, timeout: float = 12.0,
     `frm` sets the simulated sender. Without it the sender is the zero address and any call whose
     first effect is `token.approve(...)` reverts with "approve from the zero address" — an artifact of
     the messenger, not bad calldata. Pass a real EOA to see the true flow."""
-    try:
-        tx = {"to": to, "data": data}
-        if frm:
-            tx["from"] = frm
-        r = httpx.post(
-            rpc,
-            json={"jsonrpc": "2.0", "id": 1, "method": "eth_call",
-                  "params": [tx, "latest"]},
-            timeout=timeout,
-        )
-        j = r.json()
+    tx = {"to": to, "data": data}
+    if frm:
+        tx["from"] = frm
+    errs = []
+    for url in _walk(rpc):
+        try:
+            r = httpx.post(
+                url,
+                json={"jsonrpc": "2.0", "id": 1, "method": "eth_call",
+                      "params": [tx, "latest"]},
+                timeout=timeout,
+            )
+            j = r.json()
+        except Exception as e:  # httpx errors, JSON errors (HTML/plain-text bodies), timeouts
+            errs.append(f"{url}: {type(e).__name__}: {e}")
+            continue
         if "error" in j:
-            return {"ok": False, "error": j["error"].get("message", str(j["error"]))}
-        return {"ok": True, "result": j.get("result")}
-    except Exception as e:  # httpx errors, JSON errors, timeouts
-        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+            errs.append(f"{url}: {j['error'].get('message', str(j['error']))}")
+            continue
+        return {"ok": True, "result": j.get("result"), "rpc": url}
+    return {"ok": False, "error": " | ".join(errs)}
 
 
 def decode_uint(result_hex: str) -> int:
@@ -182,21 +207,29 @@ def find_log(receipt: dict, address: str, topic0_hex: str) -> dict | None:
 
 
 def rpc(method: str, params: list, rpc_url: str = DEFAULT_RPC, timeout: float = 20.0) -> dict:
-    """A generic read-only JSON-RPC call (eth_getTransactionReceipt, eth_getCode, …). Never raises."""
-    try:
-        r = httpx.post(rpc_url, json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
-                       timeout=timeout)
-        j = r.json()
+    """A generic read-only JSON-RPC call (eth_getTransactionReceipt, eth_getCode, …). Never raises.
+
+    Same endpoint walk as eth_call: a rate-limit body from the first endpoint must not be reported as
+    if the chain itself said no."""
+    errs = []
+    for url in _walk(rpc_url):
+        try:
+            r = httpx.post(url, json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
+                           timeout=timeout)
+            j = r.json()
+        except Exception as e:  # noqa: BLE001
+            errs.append(f"{url}: {type(e).__name__}: {e}")
+            continue
         if "error" in j:
-            return {"ok": False, "error": j["error"].get("message", str(j["error"]))}
-        return {"ok": True, "result": j.get("result")}
-    except Exception as e:  # noqa: BLE001
-        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+            errs.append(f"{url}: {j['error'].get('message', str(j['error']))}")
+            continue
+        return {"ok": True, "result": j.get("result"), "rpc": url}
+    return {"ok": False, "error": " | ".join(errs)}
 
 
 if __name__ == "__main__":
     # tiny self-proof of the encoder
     assert selector("register(address)") == "0x4420e486"
-    c = build_call("mintForEscrow(address)", ["0x80793a7d35f735bc76BeAf22B1f413926818f410"])
+    c = build_call("mintForEscrow(address)", ["0x4B05fA6aD0Ba0D0120Dce19Ce34dde6d1316C237"])
     assert c.startswith("0xa98aeecb"), c
     print("chain.py OK:", c[:10], "…")

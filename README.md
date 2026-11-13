@@ -8,7 +8,7 @@
 > `python3 plugins/gen.py`; the drift gate is `python3 plugins/verify.py`. Generation is what keeps
 > the four framework front-doors from drifting off the agent protocol.
 >
-> **`catalog/` is a POINT-IN-TIME copy of the live spec (taken 2026-11-11), NOT a live fetch** — see
+> **`catalog/` is a POINT-IN-TIME copy of the live spec (taken 2026-11-13), NOT a live fetch** — see
 > `catalog/README.md`. The gates prove agreement with that snapshot, so a redeploy that moves
 > addresses can leave this repo green against a stale copy (GOTCHA #208). When addresses change, bump
 > `spec.py`'s pins **and** `catalog/` in the same commit, then re-push.
@@ -34,7 +34,7 @@ Spec: <https://dngr2.github.io/dex-products/llms.txt> · catalog: <https://dngr2
 // ~/.config/claude/claude_desktop_config.json  (or any MCP client config)
 { "mcpServers": { "dex-fleet": {
   "command": "python3",
-  "args": ["/abs/path/to/dex-fleet-mcp/server.py"] } } }
+  "args": ["/home/toor/dex/products/mcp-server/server.py"] } } }
 ```
 
 > Run with plain `python3` (NOT `python3 -I`): the `mcp` package lives in user-site, which `-I` excludes.

@@ -26,27 +26,26 @@ CHAIN_ID = 8453
 CHAIN_NAME = "Base"
 USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"  # Base USDC, 6 dp (copied from llms.txt)
 USDC_DECIMALS = 6
-TREASURY = "0xe218E382F28A094f9f64E903ee3cb1750A7f204B"
+TREASURY = "0x5c0fc0917260A0656D253f1625053e3E6Dd2Ef3c"
 EXPLORER = "https://basescan.org"
 
 # --- addresses: read live from PRODUCTS.json when present, else the pinned copy -------------------
 _PINNED = {
-    "p2-forwarder": "0xaC13a6f51E886dDE81bB4692839987E6d41E1940",
-    "g2b-escrow": "0x1826C89228f3A4D0ec8f437CFdd55a02D165F1ba",
-    "g3a-sponsorship": "0xb8381fF6b76726e989a7FFF358dBc3640d78d684",
-    "g4b-receipts": "0x5F02a21C63A1115D49456F440EF69FBd57a61580",
-    "p3-router": "0x3962846445C386294B98a7770AF17192cb159447",
-    "f1c-duster": "0x4B360a122969ecd726336AdafCf13714F37BF6f1",
-    "g2a-streams": "0x8f26d7a5C89B6b8BE712346c5465b7F50e84fa19",
-    "g2a-subscriptions": "0x8f26d7a5C89B6b8BE712346c5465b7F50e84fa19",
-    "f1a-payment-links": "0x3d0e1aF04B3317CF9aeeeC45E43De92c34684041",
+    "p2-forwarder": "0x417c41d406c61E09958032Cd77338fc1F1ac7D45",
+    "g2b-escrow": "0x4B05fA6aD0Ba0D0120Dce19Ce34dde6d1316C237",
+    "g4b-receipts": "0xAE5951d25FEDD06aB7e124e91Dac3AC20f5e7cAF",
+    "p3-router": "0x036645cA607Dc8075Ae9B12A3474C00A82c306e6",
+    "f1c-duster": "0x8c38c2bbECa7575c24ACEf1d907Aa1F4f43CbFB9",
+    "g2a-streams": "0x3882A049ee99B96Ea68DF317713ed76008b9A075",
+    "g2a-subscriptions": "0x3882A049ee99B96Ea68DF317713ed76008b9A075",
+    "f1a-payment-links": "0xeD395024Bba719564bec617b6b42CF6fDC8a252c",
     # BUILD-WAVE-1 surfaces, now LIVE on Base (was contract:null). Added so selftest #3 keeps diffing
     # the pin against PRODUCTS.json; each is a nonce-0 CREATE from its own key, cold-verified.
-    "x402": "0xED79DE434D2a2633EedD95890E35637f0d41AEb3",
-    "settlement": "0x773b19856D3B477A071323B726c7f72DbB5B6e48",
-    "fleet-paymaster": "0x51B6c98a857E19FBC5C3f85b04D28E8f91c54426",
-    "g4c-toll-registry": "0x39019ECf94A54EB9D62e7cBc1bB66724aA1db70a",
-    "fleet-executor": "0x8943793970d2B29180A1B30166c0e326Bc94d2D4",
+    "x402": "0x5849eF6f21fDC21d5194c24ED6c824965A613739",
+    "settlement": "0xdDA0728Ff635B555D2Af471E2821055bE08F9127",
+    "fleet-paymaster": "0x70A615dDc4cd013Cf4D569Ae3394bF4465229B95",
+    "g4c-toll-registry": "0xc8319D6fbc0A8f1685Df9c567557141A289b7A1b",
+    "fleet-executor": "0x410396662089a26C801c54818CCd59640eFCaf77",
 }
 # g2b Escrow instances are per-deal; release/refund are called on the escrow, not the factory.
 # g2a StreamVault instances are per-stream; withdraw() is called on the vault.
@@ -55,12 +54,20 @@ _PINNED = {
 # `subscribe` now targets the LIVE factory and returns a `revoke` leg against V1' `approve(v1, 0)` to
 # clear any allowance a client granted before the migration. Copied from GATE6 §1 (#73).
 #
-# v2.1 REPOINT (2026-11-10): the live g2a factory is now v2.1 `0x8f26d7a5…fa19` (fired by dex-critic),
-# replacing v2 `0x14bBd99B…58a0`. v2.1 adds receive()/fallback()/rescue(onlyOwner) + createStreamSelf-
-# Funded — the DEAD-DROP fix (a bare token/native send to the factory used to be orphan dust; v1
-# stranded 5.01 USDC that way). Same CREATE2 mint+fund shape otherwise. Cold-verified: runtime keccak
-# a4798afc…3a6761 == the pin, rescue selector 0x4fdf5d1d present. Evidence:
-# products/g2a-streams/V21-DEAD-DROP-FIX-EVIDENCE-2026-11-10.md.
+# The revoke target is the FROZEN v1 factory `0x2bB5b763…2b4F` (9,385 B runtime, keccak `0x6dfe06ec…`),
+# NOT the current factory. This was wrong before 2026-11-12: V1_APPROVE_REVOKE pointed at the same
+# 0x3882A049 address as `ADDR["g2a-subscriptions"]`, so the selftest's "v2 un-paused AND v1 paused"
+# pair read `paused()` twice on ONE contract and could never be satisfied. An allowance is granted to
+# the factory contract, so the revoke MUST name the exact v1 contract the client approved.
+#
+# v2.1 REPOINT (2026-11-10): the live g2a factory is now v2.1 `0x3882A049…a075` (deploy tx
+# 0x5fa89c18…a97c2, blk 55483090, predicted at deployer nonce 13 — this is what the earlier
+# `0x8f26d7a5…fa19` note mis-recorded as the landed address; the receipt's contractAddress is
+# 0x3882A049…a075), replacing v2 `0x14bBd99B…58a0`. v2.1 adds receive()/fallback()/rescue(onlyOwner) +
+# createStreamSelfFunded — the DEAD-DROP fix (a bare token/native send to the factory used to be orphan
+# dust; v1 stranded 5.01 USDC that way). Same CREATE2 mint+fund shape otherwise. Cold-verified
+# 2026-11-12: runtime keccak a4798afc…3a6761 == the pin, paused()==false, rescue selector 0x4fdf5d1d.
+# Evidence: products/g2a-streams/V21-DEAD-DROP-FIX-EVIDENCE-2026-11-10.md.
 V1_APPROVE_REVOKE = [
     {"to": "0x2bB5b763a8A85e446909674177e65cb6F1052b4F", "sig": "approve(address,uint256)"},
 ]
@@ -74,7 +81,7 @@ SELFFUND_SIG = "createStreamSelfFunded(address,address,address,uint256,uint64,ui
 # resolve_pay_link must fall back to it or the on-chain links from that window resolve to nothing.
 # Copied from exec3/GATE6-MIGRATION-PLAN.md §1 row B (#73). The link is always built with the REGISTRY
 # THAT EMITTED, since the /p2-forwarder page re-reads the RequestCreated log from that exact emitter.
-V1_F1A = "0x9651cD591cFe33E1b684e5d8541940e78724c749"
+V1_F1A = "0x036645cA607Dc8075Ae9B12A3474C00A82c306e6"
 
 
 def _locate(*cands: str) -> str | None:
@@ -231,7 +238,6 @@ TRANSFER_SIG = "transfer(address,uint256)"
 FEE_GETTERS = {
     "p2-forwarder": {"sig": "feeBps()(uint256)", "unit": "bps", "note": "on the Registry; per forwarded payment"},
     "g2b-escrow": {"sig": "feeBps()(uint256)", "unit": "bps", "note": "on the factory; release only, 0 on refund"},
-    "g3a-sponsorship": {"sig": None, "unit": "per-tx", "note": "no bps getter — fee is per sponsored tx (>=1.5x gas floor)"},
     "g4b-receipts": {"sig": "mintFeeWei()(uint256)", "unit": "wei", "note": "flat mint fee, payable in the {value}"},
     "p3-router": {"sig": "feeBps()(uint256)", "unit": "bps", "note": "immutable take on INPUT; do NOT read MAX_FEE_BPS (that is 10000, a denominator)"},
     "f1c-duster": {"sig": None, "unit": "bps", "note": "ZERO by design — no getter, the sweep takes no fee"},

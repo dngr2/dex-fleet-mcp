@@ -13,4 +13,4 @@ with *this copy*, not with the live site.
 `spec.py`'s `_PINNED` map **and** `catalog/PRODUCTS.json` (and `catalog/llms.txt` if sigs move), then
 re-push. Whoever owns the redeploy should send the new addresses; re-run the cold-clone gate after.
 
-Snapshot taken 2026-11-09 (matches `spec.py` at commit `83eed74`).
+Snapshot taken 2026-11-13 (the new-line repoint; `spec.py` pins agree), md5 `70644208…` on PRODUCTS.json. Previous snapshot was 2026-11-09 at `83eed74`.

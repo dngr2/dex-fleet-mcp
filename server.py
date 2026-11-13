@@ -16,6 +16,7 @@ Fees are read LIVE per contract (GOTCHA #144: p3's MAX_FEE_BPS=10000 is a DENOMI
 from __future__ import annotations
 
 import json
+import time
 from typing import Optional
 
 from mcp.server.mcpserver import MCPServer
@@ -118,7 +119,8 @@ def _fee_gate(product: str, expect_bps: int = -1) -> list[str]:
     return w
 
 
-def _result(tool: str, calls: list[dict], note: str = "", warn: Optional[list[str]] = None) -> str:
+def _result(tool: str, calls: list[dict], note: str = "", warn: Optional[list[str]] = None,
+            extra: Optional[dict] = None) -> str:
     o = {
         "tool": tool,
         "product": spec.CALLS[tool]["product"] if tool in spec.CALLS else "",
@@ -129,6 +131,8 @@ def _result(tool: str, calls: list[dict], note: str = "", warn: Optional[list[st
     }
     if warn:
         o["warnings"] = warn
+    if extra:
+        o.update(extra)   # R3-4: `needs_signature` / digest / nonce ride here, not in prose
     return _json(o)
 
 
@@ -237,21 +241,64 @@ def register_deposit_address(destination: str, dry_run: bool = True, expect_fee_
                    warn=_fee_gate("p2-forwarder", expect_fee_bps))
 
 
-@server.tool(description="PAY: the real two-step. Leg 1 register(destination) on the p2 Registry (mints your deposit address, idempotent per nonce); Leg 2 transfer(token, depositAddr, amount) on the TOKEN. Replace depositAddr with leg 1's return before sending leg 2. WARNs if read_fee wasn't called this session.")
+@server.tool(description="PAY: the real two-step. Leg 1 register(destination) on the p2 Registry (mints your deposit address, idempotent per nonce); Leg 2 transfer(token, depositAddr, amount) on the TOKEN (or a native value-send when token is the zero address). depositAddr is VERIFIED against registry.predict(owner, destination) before returning. WARNs if read_fee wasn't called this session.")
 def pay(destination: str, token: str = spec.USDC, amount: int = 0, deposit_addr: str = "",
-        dry_run: bool = True, expect_fee_bps: int = -1) -> str:
+        owner: str = "", dry_run: bool = True, expect_fee_bps: int = -1) -> str:
+    """R3-5: leg 2 pays whatever bare 20 bytes came off leg 1's return. If that decode is wrong or the
+    caller pasted a stranger's deposit address, the money lands at the WRONG forwarder. So predict()
+    the registry itself and ASSERT the encoded destination equals it — a real cross-check, not a
+    re-derivation of our own bytes. `owner` defaults to SIM_FROM (the simulated sender == register's
+    msg.sender, so predict must use the same identity)."""
     reg = spec.ADDR["p2-forwarder"]
-    c1 = _one("pay", spec.CALLS["pay"]["sigs"][0], [_addr(destination)], reg, dry_run)
-    # leg 2: transfer on the token. If the caller hasn't supplied the deposit address, hand them the
-    # echo of leg 1's result as the placeholder so the calldata is still concrete.
-    dep = _addr(deposit_addr) if deposit_addr else (c1["sim"].get("result") and
-          "0x" + c1["sim"]["result"][2:][24:64]) or "0x" + "00" * 20
-    c2 = _one("pay", spec.TRANSFER_SIG, [dep, int(amount)], _addr(token), dry_run)
+    who = _addr(owner) if owner else SIM_FROM
+    dest = _addr(destination)
+    c1 = _one("pay", spec.CALLS["pay"]["sigs"][0], [dest], reg, dry_run)
+    warn = list(_fee_gate("p2-forwarder", expect_fee_bps))
+    extra: dict = {"owner": who}
+    native = (not token) or token == "0x" + "00" * 20
+
+    # ask the REGISTRY what the deposit address is (predict binds owner+nonce+destination).
+    # Gated on dry_run so the offline drift check (verify.py, dry_run=False) stays RPC-free and
+    # deterministic: without it leg2's placeholder is the zero address, exactly as before.
+    truth = None
+    if dry_run:
+        rp = chain.eth_call(reg, chain.build_call(spec.READS["p2-forwarder"][0], [who, dest]))
+        if rp["ok"]:
+            truth = chain.decode_addr(rp["result"])
+            extra["predicted"] = truth
+        else:
+            warn.append(f"predict(owner,destination) read failed ({rp['error']}) — deposit address NOT "
+                        f"cross-checked this call")
+
+    if deposit_addr:
+        dep = _addr(deposit_addr)
+        if truth and dep.lower() != truth.lower():
+            warn.append(f"DEST MISMATCH: you passed deposit_addr {dep} but registry.predict({who}, "
+                        f"{dest}) = {truth} — paying {dep} sends the money to the WRONG forwarder")
+    elif c1["sim"].get("result"):
+        dep = chain.decode_addr(c1["sim"]["result"])
+    elif truth:
+        dep = truth
+    else:
+        dep = "0x" + "00" * 20
+    # the sim's own return must ALSO agree with predict — a disagreement means the decode is wrong.
+    if truth and c1["sim"].get("result") and dep.lower() != truth.lower():
+        warn.append(f"DECODE MISMATCH: leg-1 sim returned {dep} but predict() says {truth}")
+
+    if native:
+        c2 = {"to": dep, "value": int(amount), "data": "0x", "sig": "(native value send)",
+              "selector": "0x", "sim": c1["sim"]}
+    else:
+        c2 = _one("pay", spec.TRANSFER_SIG, [dep, int(amount)], _addr(token), dry_run)
+    extra["deposit_addr"] = dep
+    if truth:
+        extra["verified"] = dep.lower() == truth.lower()
     return _result("pay", [c1, c2],
                    "leg1 mints your deposit address (Registry); leg2 sends the token to it (token. "
-                   "transfer). The forwarder then sweeps to `destination`. Send leg1 first, substitute "
-                   "its return for the placeholder in leg2.",
-                   warn=_fee_gate("p2-forwarder", expect_fee_bps))
+                   "transfer) — or native value to that address when token=0x0. The forwarder then "
+                   "sweeps to `destination`. Send leg1 first, substitute its return for the "
+                   "placeholder in leg2.",
+                   warn=warn or None, extra=extra)
 
 
 @server.tool(description="Create an escrow (g2b) locked against a hashlock or arbiter; funds sit in the contract until release or refund. `hashlock` is ALREADY bytes32 — call escrow_new_secret() first and pass its `hashlock`; the matching `preimage` goes to escrow_release (never re-hash it).")
@@ -407,24 +454,59 @@ def quote_sweep(tokens, hops, slippage_bps: int = 50, dry_run: bool = True) -> s
                   "spec": spec.SPEC_URL})
 
 
-@server.tool(description="SIGNED-INTENT batch on the FleetExecutor EIP-7702 delegate (the authority signs EIP-712 off-chain; ANY relayer carries it, paying the gas, while the authority's own frame runs the calls). Calls are (target,value,data). If you omit nonce/deadline/sig you get the digest() to sign; call digest() on the AUTHORITY address.")
+@server.tool(description="SIGNED-INTENT batch on the FleetExecutor EIP-7702 delegate (the authority signs EIP-712 off-chain; ANY relayer carries it, paying the gas, while the authority's own frame runs the calls). Calls are (target,value,data). If you omit nonce/deadline/sig you get `needs_signature: true` + the digest() to sign — the returned calldata alone is NOT sendable. Call digest() on the AUTHORITY address.")
 def sponsored_call(calls, nonce: int = -1, deadline: int = 0, sig: str = "",
                    authority: str = "", dry_run: bool = True) -> str:
     """calls: JSON list of [target, value, data] OR the 3-tuple form. The emitted leg targets the
-    AUTHORITY (the delegated EOA), because `execute` is called on the EOA, not the delegate address."""
+    AUTHORITY (the delegated EOA), because `execute` is called on the EOA, not the delegate address.
+
+    R3-4: unsigned => the calldata carries a 65-zero placeholder signature and a made-up nonce, so a
+    client that forwards it unchanged sends a tx that REVERTS (BadSignature/ECDSA_ZERO or BadNonce)
+    and still pays gas. So when `sig` is empty we mark the result `needs_signature: true`, fill nonce
+    with the REAL next value (nonceOf(authority)+1) and return the exact `digest` to sign."""
     delegate = spec.ADDR["fleet-executor"]
     sig_str = spec.CALLS["sponsored_call"]["sigs"][0]
     if isinstance(calls, str):
         calls = json.loads(calls or "[]")
     norm = [[_addr(c[0]), int(c[1]), c[2]] for c in calls]
     to = _addr(authority) if authority else delegate
-    args = [norm, int(nonce) if nonce >= 0 else 0, int(deadline), sig or ("0x" + "00" * 65)]
+
+    warn: list[str] = []
+    extra: dict = {}
+    n = int(nonce) if nonce >= 0 else 0   # 0 is the PRIOR behaviour when unsigned+unreadable
+    dl = int(deadline)
+    if not sig:
+        extra["needs_signature"] = True
+        extra["digest_hint"] = ("sign EIP-712 digest(calls,nonce,deadline) ON the authority; "
+                               "nonce = nonceOf(authority)+1; then re-call with that sig")
+        if authority and dry_run:
+            # nonceOf/digest live on the AUTHORITY (verifyingContract == address(this) == the EOA);
+            # reading them on the delegate address would bind the WRONG verifyingContract.
+            rn = chain.eth_call(to, chain.build_call("nonceOf(address)", [to]))
+            if rn["ok"]:
+                n = chain.decode_uint(rn["result"]) + 1
+                dl = dl or (int(time.time()) + 300)
+                rd = chain.eth_call(to, chain.build_call(
+                    "digest((address,uint256,bytes)[],uint256,uint256)", [norm, n, dl]))
+                if rd["ok"]:
+                    extra["digest"] = rd["result"]
+                    extra["nonce"] = n
+                    extra["deadline"] = dl
+            if "digest" not in extra:
+                warn.append("could not read digest() on the authority (RPC fault) — read it yourself")
+        elif not authority:
+            warn.append("unsigned and no `authority` given: digest()/nonceOf() live on the delegated "
+                        "EOA, so re-call with authority=<EOA> to get the real digest and nonce")
+        warn.append("UNSIGNED: the emitted calldata is NOT sendable as-is — sign `digest`, put the "
+                    "65-byte sig in `sig`, and rebuild. Sending it unchanged reverts and burns gas.")
+
+    args = [norm, n, dl, sig or ("0x" + "00" * 65)]
     c = _one("sponsored_call", sig_str, args, to, dry_run)
     note = (f"execute(calls,nonce,deadline,sig) ON THE AUTHORITY {to}. Sign EIP-712 over "
             f"digest(calls,nonce,deadline) computed on that same authority; nonce = nonceOf(authority)+1; "
             f"deadline = now+300. FleetExecutor {delegate} is a stateless EIP-7702 delegate — it holds no "
             f"funds and needs no approval.")
-    return _result("sponsored_call", [c], note)
+    return _result("sponsored_call", [c], note, warn=warn or None, extra=extra)
 
 
 @server.tool(description="Mint the one proof-of-payment receipt NFT (g4b) for a SETTLED escrow, to the payer. Payable: send mintFeeWei.")

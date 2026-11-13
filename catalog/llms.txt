@@ -6,11 +6,11 @@
 ## How an agent pays
 1. Read the product page (URL below) for the full flow and a live check.
 2. Send the call to the CONTRACT address, with ERC20 args in base units (USDC here is 6 dp: 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913).
-3. Fees go to the treasury 0xe218E382F28A094f9f64E903ee3cb1750A7f204B; every fee-bearing page reads its bps LIVE (owner-mutable).
+3. Fees go to the treasury 0x5c0fc0917260A0656D253f1625053e3E6Dd2Ef3c; every fee-bearing page reads its bps LIVE (owner-mutable).
 4. Nothing is custodial: funds move payer -> vault/escrow, never into a server.
 
 - USDC on Base: `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` (6 dp)
-- treasury: `0xe218E382F28A094f9f64E903ee3cb1750A7f204B`
+- treasury: `0x5c0fc0917260A0656D253f1625053e3E6Dd2Ef3c`
 - explorer: https://basescan.org
 
 ## Products
@@ -18,13 +18,13 @@
 ### miniapp — Pay in-feed (Farcaster / Base mini app)
 - page: https://dngr2.github.io/dex-products/miniapp/
 - what: A pay link inside a Farcaster cast or Base mini app: tap, pay USDC on Base, receipt in the thread. The deposit address is derived live from the P2 Registry's predict(), and the fee is read live on-chain.
-- contract (P2 Registry (the mini app derives its deposit address)): `0xaC13a6f51E886dDE81bB4692839987E6d41E1940`
+- contract (P2 Registry (the mini app derives its deposit address)): `0x417c41d406c61E09958032Cd77338fc1F1ac7D45`
 - fee: 500 bps on each forwarded payment (the P2 Registry's fee, paid by the forwarder the link derives) — live value in the check below
 
 ### p2-forwarder — Micro-payment forwarder
 - page: https://dngr2.github.io/dex-products/p2-forwarder/
 - what: Register once, get a personal deposit address. Anything sent there auto-forwards to YOUR destination within ~1 block.
-- contract (Registry (integrator entry point)): `0xaC13a6f51E886dDE81bB4692839987E6d41E1940`
+- contract (Registry (integrator entry point)): `0x417c41d406c61E09958032Cd77338fc1F1ac7D45`
 - call: `register(address)`  selector `0x4420e486`
 - call: `forward(address,address)`  selector `0x95ccf8bf`
 - payment verb: register(address destination) -> your deposit address; then anyone sends ERC20 to it and it auto-forwards
@@ -33,23 +33,15 @@
 ### g2b-escrow — Escrow as a service
 - page: https://dngr2.github.io/dex-products/g2b-escrow/
 - what: Lock a token amount against a hashlock or a nominated arbiter, share the escrow address, counterparty releases it — or the payer refunds after the timeout. Funds sit in the escrow contract, never a server.
-- contract (EscrowFactory (the only contract a user calls)): `0x1826C89228f3A4D0ec8f437CFdd55a02D165F1ba`
+- contract (EscrowFactory (the only contract a user calls)): `0x4B05fA6aD0Ba0D0120Dce19Ce34dde6d1316C237`
 - call: `create(address,address,uint256,bytes32,uint64)`  selector `0xa083c5e1`
 - payment verb: create(address counterparty, address token, uint256 amount, bytes32 hashlock, uint64 timeout) -> escrow; release with the preimage, refund after timeout, or arbiter release/refund
 - fee: 500 bps on release only, nothing on refund — live value in the check below
 
-### g3a-sponsorship — Gas sponsorship (meta-tx relay)
-- page: https://dngr2.github.io/dex-products/g3a-sponsorship/
-- what: A merchant integrates us; their users transact gaslessly via an EIP-7702 relay. The user acts, OUR relay pays the gas — the actor/payer split is the whole product.
-- contract (SponsorTarget (the 7702 delegate code)): `0xb8381fF6b76726e989a7FFF358dBc3640d78d684`
-- call: `sponsoredCall(address,bytes)`  selector `0x4d7ffe7a`
-- payment verb: sponsoredCall(address target, bytes data) — the relay pays gas, the actor EOA does not (EIP-7702 delegate)
-- fee: per-sponsored-tx fee to the merchant (>= 1.5x gas floor)
-
 ### g4b-receipts — Receipt NFT (proof-of-payment)
 - page: https://dngr2.github.io/dex-products/g4b-receipts/
 - what: When a g2b escrow settles, anyone may mint exactly one on-chain receipt NFT to the payer. Fully on-chain tokenURI (base64 JSON) — no server, no IPFS.
-- contract (ReceiptNFT (ERC-721)): `0x5F02a21C63A1115D49456F440EF69FBd57a61580`
+- contract (ReceiptNFT (ERC-721)): `0xAE5951d25FEDD06aB7e124e91Dac3AC20f5e7cAF`
 - call: `mintForEscrow(address)`  selector `0xa98aeecb`
 - payment verb: mintForEscrow(address escrow) — mint the one proof-of-payment NFT for a SETTLED escrow
 - fee: mintFeeWei = 50000000000000 wei (0.00005 ETH) live; free at deploy — live value in the check below
@@ -57,15 +49,15 @@
 ### p3-router — Slippage-bounded swap router
 - page: https://dngr2.github.io/dex-products/p3-router/
 - what: An on-chain router that aggregates existing Uniswap V3 + Aerodrome pools (holds no liquidity of its own). Quotes are chosen off-chain; the contract executes the hops it is handed.
-- contract (Router (Base mainnet)): `0x3962846445C386294B98a7770AF17192cb159447`
+- contract (Router (Base mainnet)): `0x036645cA607Dc8075Ae9B12A3474C00A82c306e6`
 - call: `swapExactTokensForTokens((uint256,uint256,(uint8,address,address,uint24,bool,address,address)[],address,uint256))`  selector `0xd3bd0b52`
 - payment verb: swapExactTokensForTokens(ExactInputParams) — executable hops handed in; quotes are chosen off-chain
-- fee: 5 bps on input, to the treasury
+- fee: 500 bps (5%) on input, to the treasury — immutable in the contract
 
 ### f1c-duster — Dust funnel (dust -> USDC)
 - page: https://dngr2.github.io/dex-products/f1c-duster/
 - what: Connect a wallet, see scattered dust balances, one click sweeps them to USDC on Base. Non-custodial, stateless contract.
-- contract (DustSweeper): `0x4B360a122969ecd726336AdafCf13714F37BF6f1`
+- contract (DustSweeper): `0x8c38c2bbECa7575c24ACEf1d907Aa1F4f43CbFB9`
 - call: `sweep(address[],(uint8,address,address,uint24,address)[],uint256[])`  selector `0xe7ea3ccb`
 - payment verb: sweep(address[] tokens, HopInput[] hops, uint256[] minOut) — one tx funnels scattered dust to USDC
 - fee: ZERO fee by design (acquisition funnel)
@@ -73,7 +65,7 @@
 ### g2a-streams — Payment streams
 - page: https://dngr2.github.io/dex-products/g2a-streams/
 - what: Create a streaming payment: a vault drips a token to a recipient over time; the recipient withdraws whatever has vested, permissionlessly.
-- contract (StreamFactory (Base mainnet)): `0x8f26d7a5C89B6b8BE712346c5465b7F50e84fa19`
+- contract (StreamFactory (Base mainnet)): `0x3882A049ee99B96Ea68DF317713ed76008b9A075`
 - call: `approve(address,uint256)`  selector `0x095ea7b3`
 - call: `createStream(address,address,uint256,uint64,uint64)`  selector `0x88379c90`
 - call: `withdraw()`  selector `0x3ccfd60b`
@@ -83,7 +75,7 @@
 ### g2a-subscriptions — Subscriptions (recurring toll)
 - page: https://dngr2.github.io/dex-products/subscribe/
 - what: Recurring payments on the SAME factory — no new contract. A payer pre-approves a small allowance; each period a fresh vault is minted for the next window and pulled. A missed period is a HOLE, not a debt.
-- contract (StreamFactory (reused)): `0x8f26d7a5C89B6b8BE712346c5465b7F50e84fa19`
+- contract (StreamFactory (reused)): `0x3882A049ee99B96Ea68DF317713ed76008b9A075`
 - call: `approve(address,uint256)`  selector `0x095ea7b3`
 - call: `createStreamFor(address,address,address,uint256,uint64,uint64)`  selector `0x2f7a1c66`
 - payment verb: approve(factory, ticket * periods) — ONE signature, bounded (not max-uint); a keeper then calls createStreamFor once per period from that allowance. Revoke anytime with approve(factory, 0).
@@ -92,7 +84,7 @@
 ### f1a-payment-links — Payment links
 - page: https://dngr2.github.io/dex-products/f1a-payment-links/
 - what: Create a payment request; you get a URL carrying a deposit address that auto-forwards to you. No account, no wallet, no code. The link is minted by the RequestRegistry and pays a forwarder derived from it.
-- contract (RequestRegistry): `0x3d0e1aF04B3317CF9aeeeC45E43De92c34684041`
+- contract (RequestRegistry): `0xeD395024Bba719564bec617b6b42CF6fDC8a252c`
 - call: `request(address,address,uint256,bytes32)`  selector `0xdc0edd60`
 - payment verb: request(address destination, address token, uint256 amount, bytes32 memo) -> a request id; the link hands over a deposit address that auto-forwards to the destination
 - fee: 500 bps on each forwarded payment (the P2 Registry's fee, paid by the forwarder it derives) — live value in the check below
@@ -114,7 +106,7 @@
 ### x402 — x402 facilitator (on-chain 402 gate)
 - listed on the landing at https://dngr2.github.io/dex-products/#build
 - what: The on-chain half of an HTTP-402 flow: a server returns 402, the client pays a rail, a gated writer records the settlement, and the server verifies it with a VIEW call then serves the resource. Nothing holds funds.
-- contract (x402Facilitator): `0xED79DE434D2a2633EedD95890E35637f0d41AEb3`
+- contract (x402Facilitator): `0x5849eF6f21fDC21d5194c24ED6c824965A613739`
 - call: `verify(bytes32,address,address,uint256)`  selector `0x796e926d`
 - payment verb: verify(paymentId, to, token, minAmount) — a VIEW a server calls to gate a resource; a gated writer feeds markPaid from the rail's Paid event
 - fee: none — the rail that settled the payment charged its fee
@@ -122,7 +114,7 @@
 ### settlement — Settlement registry (read-side paid())
 - listed on the landing at https://dngr2.github.io/dex-products/#build
 - what: A read-side mirror of a rail's settlement: a gated writer records paymentId -> (amount, at); anyone reads paid()/isPaid(). markPaid is idempotent, so an id can never silently change meaning.
-- contract (SettlementRegistry): `0x773b19856D3B477A071323B726c7f72DbB5B6e48`
+- contract (SettlementRegistry): `0xdDA0728Ff635B555D2Af471E2821055bE08F9127`
 - call: `paid(bytes32)`  selector `0xadd89bb2`
 - call: `isPaid(bytes32)`  selector `0xfeef6640`
 - payment verb: paid(paymentId) -> (amount, at) and isPaid(paymentId) — a read-side mirror; a gated writer calls markPaid(bytes32,uint256)
@@ -131,7 +123,7 @@
 ### fleet-executor — Fleet executor (EIP-7702 batch delegate)
 - page: https://dngr2.github.io/dex-products/fleet-executor/
 - what: One installed EIP-7702 delegate drives every fleet surface from a single off-chain EIP-712 signature over a whole batch of (target,value,data) — so the user's own code runs in the user's frame, and any relayer can carry it.
-- contract (FleetExecutor): `0x8943793970d2B29180A1B30166c0e326Bc94d2D4`
+- contract (FleetExecutor): `0x410396662089a26C801c54818CCd59640eFCaf77`
 - call: `execute((address,uint256,bytes)[],uint256,uint256,bytes)`  selector `0x74b506ec`
 - payment verb: execute(calls, nonce, deadline, sig) — an EIP-712 signed BATCH of (target,value,data) run in the delegating EOA's frame; any relayer carries it
 - fee: none — per-sponsored-tx billing is the paymaster's, next door
@@ -139,7 +131,7 @@
 ### fleet-paymaster — Fleet paymaster (ERC-4337 sponsorship)
 - listed on the landing at https://dngr2.github.io/dex-products/#build
 - what: An ERC-4337 v0.7 verifying paymaster that sponsors UserOps calling a fleet contract and charges the sponsorship back as a small additive surcharge on the rail fee (sponsorBps, default 10) — not in ETH. Allow-list + per-sender rate limit. The allow-list is a DECLARATION gate: word 0 of the op's callData is trusted, so a sponsored op can still call a non-listed contract. Rate limit is OFF by default (maxOpsPerWindow == 0 = unlimited).
-- contract (FleetPaymaster): `0x51B6c98a857E19FBC5C3f85b04D28E8f91c54426`
+- contract (FleetPaymaster): `0x70A615dDc4cd013Cf4D569Ae3394bF4465229B95`
 - call: `previewSponsorFee(uint256)`  selector `0x23202bee`
 - payment verb: previewSponsorFee(base) then deposit(); validatePaymasterUserOp sponsors allow-listed UserOps and accrues a surcharge on the rail fee
 - fee: sponsorBps default 10 bps, additive to the rail fee, paid in the RAIL TOKEN not ETH. Owner-settable up to a compiled-in MAX_SPONSOR_BPS = 1000 (10%); lowering it needs a redeploy (constant, no setter). COMBINED worst case = rail fee (<=500 bps) + sponsorBps (<=1000 bps) = 1500 bps (15%); at defaults = 500+10 = 510 bps (5.1%).
@@ -147,7 +139,7 @@
 ### g4c-toll-registry — Toll registry (per-product toll lookup)
 - listed on the landing at https://dngr2.github.io/dex-products/#build
 - what: A constructor-set, per-chain lookup: product -> (recipient, feeBps, live) in ONE call, so a new product's toll is registered rather than re-derived. A consumer pins the registry's codehash; live=false reverts rather than falling back to a compiled default.
-- contract (TollRegistry): `0x39019ECf94A54EB9D62e7cBc1bB66724aA1db70a`
+- contract (TollRegistry): `0xc8319D6fbc0A8f1685Df9c567557141A289b7A1b`
 - call: `toll(bytes32)`  selector `0x71a41241`
 - call: `isLive(bytes32)`  selector `0xcedd3a0e`
 - payment verb: toll(product) -> (recipient, feeBps, live) in one call; a consumer pins the registry codehash and divides by the literal 10_000

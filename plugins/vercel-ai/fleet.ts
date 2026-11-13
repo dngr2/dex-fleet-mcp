@@ -55,21 +55,20 @@ function _hexToBig(x: unknown): bigint { return BigInt(x == null || x === '' ? 0
 
 
 const ADDR: Record<string, string> = {
-  "miniapp": "0xaC13a6f51E886dDE81bB4692839987E6d41E1940",
-  "p2-forwarder": "0xaC13a6f51E886dDE81bB4692839987E6d41E1940",
-  "g2b-escrow": "0x1826C89228f3A4D0ec8f437CFdd55a02D165F1ba",
-  "g3a-sponsorship": "0xb8381fF6b76726e989a7FFF358dBc3640d78d684",
-  "g4b-receipts": "0x5F02a21C63A1115D49456F440EF69FBd57a61580",
-  "p3-router": "0x3962846445C386294B98a7770AF17192cb159447",
-  "f1c-duster": "0x4B360a122969ecd726336AdafCf13714F37BF6f1",
-  "g2a-streams": "0x8f26d7a5C89B6b8BE712346c5465b7F50e84fa19",
-  "g2a-subscriptions": "0x8f26d7a5C89B6b8BE712346c5465b7F50e84fa19",
-  "f1a-payment-links": "0x3d0e1aF04B3317CF9aeeeC45E43De92c34684041",
-  "x402": "0xED79DE434D2a2633EedD95890E35637f0d41AEb3",
-  "settlement": "0x773b19856D3B477A071323B726c7f72DbB5B6e48",
-  "fleet-executor": "0x8943793970d2B29180A1B30166c0e326Bc94d2D4",
-  "fleet-paymaster": "0x51B6c98a857E19FBC5C3f85b04D28E8f91c54426",
-  "g4c-toll-registry": "0x39019ECf94A54EB9D62e7cBc1bB66724aA1db70a"
+  "miniapp": "0x417c41d406c61E09958032Cd77338fc1F1ac7D45",
+  "p2-forwarder": "0x417c41d406c61E09958032Cd77338fc1F1ac7D45",
+  "g2b-escrow": "0x4B05fA6aD0Ba0D0120Dce19Ce34dde6d1316C237",
+  "g4b-receipts": "0xAE5951d25FEDD06aB7e124e91Dac3AC20f5e7cAF",
+  "p3-router": "0x036645cA607Dc8075Ae9B12A3474C00A82c306e6",
+  "f1c-duster": "0x8c38c2bbECa7575c24ACEf1d907Aa1F4f43CbFB9",
+  "g2a-streams": "0x3882A049ee99B96Ea68DF317713ed76008b9A075",
+  "g2a-subscriptions": "0x3882A049ee99B96Ea68DF317713ed76008b9A075",
+  "f1a-payment-links": "0xeD395024Bba719564bec617b6b42CF6fDC8a252c",
+  "x402": "0x5849eF6f21fDC21d5194c24ED6c824965A613739",
+  "settlement": "0xdDA0728Ff635B555D2Af471E2821055bE08F9127",
+  "fleet-executor": "0x410396662089a26C801c54818CCd59640eFCaf77",
+  "fleet-paymaster": "0x70A615dDc4cd013Cf4D569Ae3394bF4465229B95",
+  "g4c-toll-registry": "0xc8319D6fbc0A8f1685Df9c567557141A289b7A1b"
 };
 const USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 
@@ -136,8 +135,8 @@ export const create_pay_link_tool = tool({
   execute: (a: any) => create_pay_link(a.destination, a.token, a.amount, a.memo, a.dry_run),
 });
 // pay: TWO-STEP: register(destination) on the Registry, then transfer(token, depositAddr, amount) on the token; the forwarder sweeps to destination
-/** PAY: the real two-step. Leg 1 register(destination) on the p2 Registry (mints your deposit address, idempotent per nonce); Leg 2 transfer(token, depositAddr, amount) on the TOKEN. Replace depositAddr with leg 1's return before sending leg 2. WARNs if read_fee wasn't called this session. */
-export function pay(destination: any, token: any = USDC, amount: any = 0, deposit_addr: any = "", dry_run: any = true, expect_fee_bps: any = -1): Leg[] {
+/** PAY: the real two-step. Leg 1 register(destination) on the p2 Registry (mints your deposit address, idempotent per nonce); Leg 2 transfer(token, depositAddr, amount) on the TOKEN (or a native value-send when token is the zero address). depositAddr is VERIFIED against registry.predict(owner, destination) before returning. WARNs if read_fee wasn't called this session. */
+export function pay(destination: any, token: any = USDC, amount: any = 0, deposit_addr: any = "", owner: any = "", dry_run: any = true, expect_fee_bps: any = -1): Leg[] {
   const reg = ADDR['p2-forwarder'];
   const c1 = mkLeg(reg, "register(address)", "0x4420e486", [_addr(destination)]);
   const dep = deposit_addr ? _addr(deposit_addr) : ZERO20;
@@ -147,9 +146,9 @@ export function pay(destination: any, token: any = USDC, amount: any = 0, deposi
 }
 
 export const pay_tool = tool({
-  description: "PAY: the real two-step. Leg 1 register(destination) on the p2 Registry (mints your deposit address, idempotent per nonce); Leg 2 transfer(token, depositAddr, amount) on the TOKEN. Replace depositAddr with leg 1's return before sending leg 2. WARNs if read_fee wasn't called this session.",
-  parameters: jsonSchema({"type": "object", "properties": {"destination": {"type": ["string", "array", "object"]}, "token": {"type": "string", "default": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"}, "amount": {"type": "integer", "default": 0}, "deposit_addr": {"type": ["string", "array", "object"], "default": ""}, "dry_run": {"type": "boolean", "default": true}, "expect_fee_bps": {"type": "integer", "default": -1}}, "required": ["destination"]}),
-  execute: (a: any) => pay(a.destination, a.token, a.amount, a.deposit_addr, a.dry_run, a.expect_fee_bps),
+  description: "PAY: the real two-step. Leg 1 register(destination) on the p2 Registry (mints your deposit address, idempotent per nonce); Leg 2 transfer(token, depositAddr, amount) on the TOKEN (or a native value-send when token is the zero address). depositAddr is VERIFIED against registry.predict(owner, destination) before returning. WARNs if read_fee wasn't called this session.",
+  parameters: jsonSchema({"type": "object", "properties": {"destination": {"type": ["string", "array", "object"]}, "token": {"type": "string", "default": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"}, "amount": {"type": "integer", "default": 0}, "deposit_addr": {"type": ["string", "array", "object"], "default": ""}, "owner": {"type": ["string", "array", "object"], "default": ""}, "dry_run": {"type": "boolean", "default": true}, "expect_fee_bps": {"type": "integer", "default": -1}}, "required": ["destination"]}),
+  execute: (a: any) => pay(a.destination, a.token, a.amount, a.deposit_addr, a.owner, a.dry_run, a.expect_fee_bps),
 });
 // escrow_create: create(counterparty, token, amount, hashlock, timeout) -> escrow address (hashlock is already bytes32; see escrow_new_secret)
 /** Create an escrow (g2b) locked against a hashlock or arbiter; funds sit in the contract until release or refund. `hashlock` is ALREADY bytes32 — call escrow_new_secret() first and pass its `hashlock`; the matching `preimage` goes to escrow_release (never re-hash it). */
@@ -247,7 +246,7 @@ export const sweep_dust_tool = tool({
   execute: (a: any) => sweep_dust(a.tokens, a.hops, a.min_out, a.dry_run),
 });
 // sponsored_call: SIGNED-INTENT batch on the FleetExecutor EIP-7702 delegate: the authority signs EIP-712 off-chain, any relayer carries execute(calls,nonce,deadline,sig); the actor's frame, the relayer's gas
-/** SIGNED-INTENT batch on the FleetExecutor EIP-7702 delegate (the authority signs EIP-712 off-chain; ANY relayer carries it, paying the gas, while the authority's own frame runs the calls). Calls are (target,value,data). If you omit nonce/deadline/sig you get the digest() to sign; call digest() on the AUTHORITY address. */
+/** SIGNED-INTENT batch on the FleetExecutor EIP-7702 delegate (the authority signs EIP-712 off-chain; ANY relayer carries it, paying the gas, while the authority's own frame runs the calls). Calls are (target,value,data). If you omit nonce/deadline/sig you get `needs_signature: true` + the digest() to sign — the returned calldata alone is NOT sendable. Call digest() on the AUTHORITY address. */
 export function sponsored_call(calls: any, nonce: any = -1, deadline: any = 0, sig: any = "", authority: any = "", dry_run: any = true): Leg[] {
   const to = authority ? _addr(authority) : ADDR['fleet-executor'];
   const norm = _aslist(calls).map((c: any) => [_addr(c[0]), BigInt(c[1] || 0), c[2]]);
@@ -257,7 +256,7 @@ export function sponsored_call(calls: any, nonce: any = -1, deadline: any = 0, s
 }
 
 export const sponsored_call_tool = tool({
-  description: "SIGNED-INTENT batch on the FleetExecutor EIP-7702 delegate (the authority signs EIP-712 off-chain; ANY relayer carries it, paying the gas, while the authority's own frame runs the calls). Calls are (target,value,data). If you omit nonce/deadline/sig you get the digest() to sign; call digest() on the AUTHORITY address.",
+  description: "SIGNED-INTENT batch on the FleetExecutor EIP-7702 delegate (the authority signs EIP-712 off-chain; ANY relayer carries it, paying the gas, while the authority's own frame runs the calls). Calls are (target,value,data). If you omit nonce/deadline/sig you get `needs_signature: true` + the digest() to sign \u2014 the returned calldata alone is NOT sendable. Call digest() on the AUTHORITY address.",
   parameters: jsonSchema({"type": "object", "properties": {"calls": {"type": ["string", "array", "object"]}, "nonce": {"type": "integer", "default": -1}, "deadline": {"type": "integer", "default": 0}, "sig": {"type": ["string", "array", "object"], "default": ""}, "authority": {"type": ["string", "array", "object"], "default": ""}, "dry_run": {"type": "boolean", "default": true}}, "required": ["calls"]}),
   execute: (a: any) => sponsored_call(a.calls, a.nonce, a.deadline, a.sig, a.authority, a.dry_run),
 });

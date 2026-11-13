@@ -37,6 +37,7 @@ def _locate(*cands):
 
 LLMS = _locate(os.path.join("..", "dex-site", "site", "llms.txt"),
                os.path.join("catalog", "llms.txt"))
+DEST = "0x000000000000000000000000000000000000dEaD"   # plausible scratch target, nothing sensitive
 PRODUCTS = _locate(os.path.join("..", "dex-site", "PRODUCTS.json"),
                    os.path.join("catalog", "PRODUCTS.json"))
 
@@ -116,14 +117,18 @@ if have_spec:
         print(f"[warn] LIVE site still publishes the OLD g2a addr — site republish pending "
               f"(live spec lag, not an MCP bug)")
     # CHAIN TRUTH (RL): the v1 factory MUST be paused and the v2 MUST be un-paused — this is the
-    # MCP-1 bug in one read, independent of any spec doc.
+    # MCP-1 bug in one read, independent of any spec doc. The two pointers MUST also be different
+    # contracts: if they alias, both reads hit one address and "un-paused AND paused" is unsatisfiable.
     try:
-        p2v2 = chain.eth_call(spec.ADDR["g2a-subscriptions"], chain.selector("paused()"))
-        v1 = chain.eth_call(spec.V1_APPROVE_REVOKE[0]["to"], chain.selector("paused()"))
+        live_f, dead_f = spec.ADDR["g2a-subscriptions"], spec.V1_APPROVE_REVOKE[0]["to"]
+        check("v1 revoke target differs from the live factory", live_f.lower() != dead_f.lower(),
+              f"live={live_f} v1={dead_f} (aliased → reads double-count)")
+        p2v2 = chain.eth_call(live_f, chain.selector("paused()"))
+        v1 = chain.eth_call(dead_f, chain.selector("paused()"))
         v2_unpaused = p2v2["ok"] and int(p2v2["result"], 16) == 0
         v1_paused = v1["ok"] and int(v1["result"], 16) == 1
         check("chain: v2 factory un-paused AND v1 factory paused", v2_unpaused and v1_paused,
-              f"v2_unpaused={v2_unpaused} v1_paused={v1_paused}")
+              f"v2_unpaused={v2_unpaused} v1_paused={v1_paused} ({live_f} / {dead_f})")
     except Exception as e:  # noqa: BLE001
         print(f"[skip] chain paused() check: {type(e).__name__}: {e}")
 
@@ -188,6 +193,56 @@ check("sponsored_call targets fleet-executor and emits execute()",
       and spec.CALLS["sponsored_call"]["sigs"] == ["execute((address,uint256,bytes)[],uint256,uint256,bytes)"],
       spec.CALLS["sponsored_call"]["sigs"])
 
+# 4c-bis. R3-4: an UNSIGNED sponsored_call must say so. The old shape emitted a 65-zero placeholder
+#     sig + nonce 0 and looked sendable; a client forwarding it reverted (BadSignature/BadNonce) and
+#     paid gas. The tool must now mark needs_signature AND the emitted sig arg must still be the
+#     65-zero placeholder (offline, no RPC — so verify.py stays byte-identical).
+try:
+    import server as _sv2
+    r = json.loads(_sv2.sponsored_call(calls=[["0x" + "ab" * 20, 0, "0xdeadbeef"]], dry_run=False))
+    args = r["calls"][0]
+    # find the sig arg positionally: execute(calls,nonce,deadline,sig) -> data ends with the 65-byte arg
+    sig_arg = "0x" + args["data"][-65 * 2:]
+    check("R3-4 unsigned sponsored_call flags needs_signature + keeps the 65-zero placeholder",
+          r.get("needs_signature") is True and sig_arg == "0x" + "00" * 65
+          and any("UNSIGNED" in w for w in r.get("warnings", [])),
+          f"needs_signature={r.get('needs_signature')} sig_arg_tail={sig_arg[:12]}…")
+    # negative control: a SUPPLIED sig must NOT set the flag
+    rs = json.loads(_sv2.sponsored_call(calls=[["0x" + "ab" * 20, 0, "0xdeadbeef"]],
+                                        nonce=1, deadline=1_800_000_000,
+                                        sig="0x" + "11" * 65, dry_run=False))
+    check("R3-4 negcontrol: a supplied sig clears needs_signature",
+          "needs_signature" not in rs, f"keys={sorted(rs)}")
+except Exception as e:  # noqa: BLE001
+    check("R3-4 unsigned sponsored_call flags needs_signature", False, f"{type(e).__name__}: {e}")
+
+# 4c-ter. R3-6: g3a-sponsorship must be GONE from the pin, the fee table and the catalog — it was a
+#     second product entry for something now expressed as `sponsored_call`. An agent reading
+#     server_info must not see a duplicate.
+_g3a = "0xb8381fF6b76726e989a7FFF358dBc3640d78d684"
+check("R3-6 g3a-sponsorship dropped from _PINNED + FEE_GETTERS",
+      "g3a-sponsorship" not in spec._PINNED and "g3a-sponsorship" not in spec.FEE_GETTERS
+      and _g3a not in spec.ADDR.values(),
+      f"in_ADDR={_g3a in spec.ADDR.values()}")
+
+# 4c-quater. R3-5: pay must CROSS-CHECK the deposit address, not just re-encode its own bytes.
+#     Offline the predict read is skipped (dry_run=False), so assert the structure: `owner` is a
+#     parameter and the result carries deposit_addr; and with a SUPPLIED deposit_addr that differs
+#     from the sim return the code path is reachable (offline: no sim, so it echoes the supplied one).
+try:
+    import server as _sv3
+    import inspect
+    params = inspect.signature(_sv3.pay).parameters
+    check("R3-5 pay takes `owner` (the predict subject) and returns deposit_addr",
+          "owner" in params, f"params={sorted(params)}")
+    rp = json.loads(_sv3.pay(destination="0x" + "cd" * 20, deposit_addr="0x" + "ee" * 20, dry_run=False))
+    check("R3-5 pay encodes the SUPPLIED deposit_addr into leg 2 (not a blind placeholder)",
+          rp["calls"][1]["data"].endswith("ee" * 20 + "0" * 24) or "ee" * 20 in rp["calls"][1]["data"]
+          or rp["calls"][1]["to"] == "0x" + "ee" * 20,
+          f"leg2.to={rp['calls'][1]['to']} deposit_addr={rp.get('deposit_addr')}")
+except Exception as e:  # noqa: BLE001
+    check("R3-5 pay cross-checks the deposit address", False, f"{type(e).__name__}: {e}")
+
 # 4d. hashlock round-trip: escrow_new_secret's (preimage, hashlock) must satisfy keccak(preimage)==
 #     hashlock AND create/release must emit those SAME two words (a double-hash was the old bug).
 try:
@@ -248,6 +303,39 @@ try:
           any("FEE MISMATCH" in x for x in w_mismatch), str(w_mismatch))
 except Exception as e:  # noqa: BLE001
     check("pay warns until read_fee was called this session, then clears", False,
+          f"{type(e).__name__}: {e}")
+
+# 4c. R3-4: an unsigned sponsored_call must be marked UN-SENDABLE and carry the digest hint ----------
+#     (offline: dry_run=False skips the nonce/digest read, exactly the shape a client sees first).
+try:
+    import server as _sp2
+    _b = json.loads(_sp2.sponsored_call(calls=[[DEST, 0, "0x"]], sig="", authority="", dry_run=False))
+    check("R3-4 unsigned sponsored_call => needs_signature:true (not a sendable placeholder)",
+          _b.get("needs_signature") is True and any("authority" in w for w in _b.get("warnings", [])),
+          json.dumps({k: _b.get(k) for k in ("needs_signature", "warnings")})[:200])
+except Exception as e:  # noqa: BLE001
+    check("R3-4 unsigned sponsored_call => needs_signature:true (not a sendable placeholder)", False,
+          f"{type(e).__name__}: {e}")
+
+# 4d. R3-5: pay must cross-check the deposit address against registry.predict() and NAME a mismatch --
+#     (offline: eth_call is stubbed, so predict AND the leg-1 sim return the same known address.)
+try:
+    import server as _sp3
+    import chain as _ch3
+    _addr20 = "0x" + "11" * 20                     # what a caller pastes / what deposit_addr takes
+    _word = "0x" + "00" * 12 + "11" * 20           # what eth_call returns: a left-padded 32-byte word
+    _orig3 = _ch3.eth_call
+    _ch3.eth_call = lambda to, data, **k: {"ok": True, "result": _word}
+    _o3 = json.loads(_sp3.pay(destination=DEST, amount=1, deposit_addr="0x" + "22" * 20, dry_run=True))
+    _ok3 = json.loads(_sp3.pay(destination=DEST, amount=1, deposit_addr=_addr20, dry_run=True))
+    _ch3.eth_call = _orig3
+    check("R3-5 pay flags a deposit_addr that != predict() and passes the matching one",
+          any("DEST MISMATCH" in w for w in _o3.get("warnings", []))
+          and _o3.get("deposit_addr", "").lower() == "0x" + "22" * 20
+          and not any("DEST MISMATCH" in w for w in _ok3.get("warnings", [])),
+          f"mismatch={_o3.get('warnings')} match={_ok3.get('warnings')}")
+except Exception as e:  # noqa: BLE001
+    check("R3-5 pay flags a deposit_addr that != predict() and passes the matching one", False,
           f"{type(e).__name__}: {e}")
 
 # 5. import the server module (needs mcp in user-site — run WITHOUT -I) -----------------------------
