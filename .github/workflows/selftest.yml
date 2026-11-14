@@ -47,14 +47,17 @@ jobs:
           .venv/bin/pip install --upgrade pip
           .venv/bin/pip install -e .
 
+      # `python -c`, not a heredoc: a `<<'EOF'` body inside a YAML block scalar is indented, so the
+      # closing `EOF` is never at column 0 and the shell consumes the rest of the file as script text.
       - name: address book is re-vendored (hash pin matches)
-        run: python - <<'EOF'
+        run: |
+          python -c '
           import hashlib, re, sys
-          pin = re.search(r'_ADDR_SHA256 = "([0-9a-f]{64})"', open("spec.py").read()).group(1)
+          pin = re.search(r"_ADDR_SHA256 = \"([0-9a-f]{64})\"", open("spec.py").read()).group(1)
           have = hashlib.sha256(open("fleet_addr/addresses.json", "rb").read()).hexdigest()
           print(f"pin {pin}\nhave {have}")
           sys.exit(0 if pin == have else 1)
-          EOF
+          '
 
       - name: selftest (offline structural teeth)
         run: |
@@ -69,11 +72,23 @@ jobs:
       - name: calldata for every tool (no RPC)
         run: .venv/bin/python dryrun.py --nosim | tail -3
 
-      - name: generated plugins are in sync
+      - name: typescript toolchain (so verify.py's cross-language leg RUNS)
         run: |
-          if [ -f plugins/gen.py ]; then
-            .venv/bin/python plugins/gen.py --check
-            .venv/bin/python plugins/verify.py
-          else
-            echo "no plugins/ in this tree — skipped"
-          fi
+          # verify.py drives tsc/node when present and SKIPS them otherwise — silence there would
+          # look like a pass. ubuntu-latest ships node; tsc does not.
+          node --version
+          npm install -g typescript
+          tsc --version
+
+      - name: generated plugins are in sync and drift-free
+        run: |
+          set -o pipefail
+          if [ ! -f plugins/gen.py ]; then echo "no plugins/ in this tree — skipped"; exit 0; fi
+          .venv/bin/python plugins/gen.py --check
+          .venv/bin/python plugins/verify.py 2>&1 | tee /tmp/verify.log | tail -3
+          # COUNT TEETH, same reason as the selftest floor: verify.py skips (rather than fails) when a
+          # toolchain is absent, so a plain rc 0 must not be trusted on its own.
+          n=$(grep -c '^  FAIL ' /tmp/verify.log || true)
+          echo "verify FAIL rows: $n"
+          [ "$n" = "0" ]
+          grep -q '^  ok   TS/' /tmp/verify.log || { echo "REFUSING: the TS leg never ran"; exit 1; }
