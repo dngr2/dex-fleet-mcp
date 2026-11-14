@@ -1,0 +1,21 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+  "name": "io.github.dngr2/dex-fleet-mcp",
+  "description": "Non-custodial payment rails on Base as MCP tools — calldata + simulation, no keys held",
+  "version": "0.2.0",
+  "repository": {
+    "url": "https://github.com/dngr2/dex-fleet-mcp",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "dex-fleet-mcp",
+      "version": "0.2.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "runtimeHint": "uvx"
+    }
+  ]
+}

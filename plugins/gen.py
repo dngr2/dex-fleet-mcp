@@ -278,33 +278,49 @@ def _py_fn(name: str, d: dict, spec, flavor: str) -> str:
             "    args = [_hash(preimage)] if which == 'release' else []",
             "    return _result('escrow_release', [_build_sig('escrow_release', sig, escrow, args)])",
         ]
-    elif name in ("stream_create", "subscribe"):
-        fac = "g2a-streams" if name == "stream_create" else "g2a-subscriptions"
-        name_fn = "createStream" if name == "stream_create" else "createStreamFor"
-        sig2 = ("createStream(address,address,uint256,uint64,uint64)" if name == "stream_create"
-                else "createStreamFor(address,address,address,uint256,uint64,uint64)")
-        args2 = ("[recipient, token, int(amount), int(start), int(end)]" if name == "stream_create"
-                 else "[payer, recipient, token, int(amount), int(start), int(end)]")
-        amt2 = "int(amount)" if name == "stream_create" else "int(amount) * int(periods)"
+    elif name == "stream_create":
+        sig2 = "createStream(address,address,uint256,uint64,uint64)"
         body = [
-            f"    factory = spec.ADDR['{fac}']",
-            f"    approve = _build_sig('{name}', 'approve(address,uint256)', token, [factory, {amt2}])",
-            f"    create = _build_sig('{name}', '{sig2}', factory, {args2})",
+            "    factory = spec.ADDR['g2a-streams']",
+            "    approve = _build_sig('stream_create', 'approve(address,uint256)', token, "
+            "[factory, int(amount)])",
+            f"    create = _build_sig('stream_create', '{sig2}', factory, "
+            "[recipient, token, int(amount), int(start), int(end)])",
+            "    return _result('stream_create', [approve, create])",
         ]
-        if name == "subscribe":
-            # A1's subscribe ALSO appends a SECOND concatenated JSON doc (subscribe.revoke) carrying a
-            # THIRD leg — approve(v1_factory, 0). The revoke leg is NOT in the first doc's `calls`
-            # (which stays [approve, create]); it rides only in the second doc. Mirror both exactly, or
-            # A4 drops the migration revoke leg its own docstring promises.
-            body += [
-                "    _v1 = spec.V1_APPROVE_REVOKE[0]",
-                "    revoke = _build_sig('subscribe', _v1['sig'], "
-                "_addr(token), [_addr(_v1['to']), 0])",
-                "    return _result('subscribe', [approve, create]) + "
-                "_json({'tool': 'subscribe.revoke', 'calls': [revoke]})",
-            ]
-        else:
-            body.append(f"    return _result('{name}', [approve, create])")
+    elif name == "subscribe":
+        # MCP-1: subscribe is THREE legs, not two. approve alone works only while the payer is a
+        # globally allow-listed keeper; setMandate is the bounded authorization (ticket, period, laps,
+        # first start) the contract enforces on every lap. Ordering is load-bearing — approve funds,
+        # setMandate arms, and only then may createStreamFor (the first lap) fire. All three are keyed
+        # by msg.sender, so all three must be signed by `payer`.
+        #
+        # The revoke block is a JSON KEY now, not a second concatenated document: the tool text used
+        # to be two docs back to back, so a client doing plain json.loads got "Extra data". A4 keeps
+        # one doc and carries `revoke` the same way A1 does.
+        body = [
+            "    factory = spec.ADDR['g2a-subscriptions']",
+            "    ticket, laps = int(amount), int(periods)",
+            "    period = int(end) - int(start)",
+            "    approve = _build_sig('subscribe', 'approve(address,uint256)', _addr(token), "
+            "[factory, ticket * laps])",
+            "    mandate = _build_sig('subscribe', "
+            "'setMandate(address,address,uint256,uint64,uint32,uint64)', factory, "
+            "[_addr(recipient), _addr(token), ticket, period, laps, int(start)])",
+            "    create = _build_sig('subscribe', "
+            "'createStreamFor(address,address,address,uint256,uint64,uint64)', factory, "
+            "[_addr(payer), _addr(recipient), _addr(token), ticket, int(start), int(end)])",
+            "    _v1 = spec.V1_APPROVE_REVOKE[0]",
+            "    revoke = [",
+            "        _build_sig('disarm_mandate', spec.CALLS['disarm_mandate']['sigs'][0], factory, "
+            "[_addr(recipient), _addr(token)]),",
+            "        _build_sig('disarm_mandate', _v1['sig'], _addr(token), [_addr(_v1['to']), 0]),",
+            "    ]",
+            "    return _json({'tool': 'subscribe', 'chain': {'id': spec.CHAIN_ID},",
+            "                  'calls': [approve, mandate, create],",
+            "                  'revoke': {'note': 'disarm + clear the v1 allowance; either alone leaves "
+            "half the authorization live', 'calls': revoke}})",
+        ]
     elif name == "pay":
         # A1's pay is a TWO-STEP: leg1 register(destination) on the Registry, leg2 transfer on the
         # TOKEN. Mirror A1 server.py exactly (deposit_addr placeholder = zero when not supplied, which
@@ -511,31 +527,41 @@ def _ts_fn(name: str, d: dict, spec, tools) -> str:
                 {"release": "release(bytes32)", "refund": "refund()",
                  "arbiterRelease": "arbiterRelease()", "arbiterRefund": "arbiterRefund()"}.items()}
         sel_decl = f"const SEL_{name}: Record<string, string> = {json.dumps(sels)};"
-    elif name in ("stream_create", "subscribe"):
-        fac = "g2a-streams" if name == "stream_create" else "g2a-subscriptions"
-        sig2 = ("createStream(address,address,uint256,uint64,uint64)" if name == "stream_create"
-                else "createStreamFor(address,address,address,uint256,uint64,uint64)")
-        args2 = ("[recipient, token, _hexToBig(amount), _hexToBig(start), _hexToBig(end)]"
-                 if name == "stream_create"
-                 else "[payer, recipient, token, _hexToBig(amount), _hexToBig(start), _hexToBig(end)]")
-        amt2 = "amount" if name == "stream_create" else "BigInt(amount) * BigInt(periods)"
+    elif name == "stream_create":
+        sig2 = "createStream(address,address,uint256,uint64,uint64)"
         seg = [
-            f"  const factory = ADDR['{fac}'];",
-            f"  const approve = mkLeg(_addr(token), 'approve(address,uint256)', SEL_{name}_a, [factory, {amt2}]);",
-            f"  const create = mkLeg(factory, {json.dumps(sig2)}, SEL_{name}_c, {args2});",
+            "  const factory = ADDR['g2a-streams'];",
+            "  const approve = mkLeg(_addr(token), 'approve(address,uint256)', SEL_stream_create_a, [factory, amount]);",
+            f"  const create = mkLeg(factory, {json.dumps(sig2)}, SEL_stream_create_c, [recipient, token, _hexToBig(amount), _hexToBig(start), _hexToBig(end)]);",
+            "  const legs: Leg[] = [approve, create];",
         ]
-        if name == "subscribe":
-            # A1 emits the v1-revoke as a SECOND concatenated doc; the TS flavor returns one Leg[],
-            # so append it here as a third leg (send only if an OLD v1 allowance is held).
-            _v1 = spec.V1_APPROVE_REVOKE[0]
-            seg += [
-                f"  const revoke = mkLeg(_addr(token), {json.dumps(_v1['sig'])}, {json.dumps(chain_sel(spec, _v1['sig']))}, [_addr({json.dumps(_v1['to'])}), 0n], 'send only if you hold an OLD v1 allowance');",
-                "  const legs: Leg[] = [approve, create, revoke];",
-            ]
-        else:
-            seg.append("  const legs: Leg[] = [approve, create];")
-        sel_decl = (f"const SEL_{name}_a = {json.dumps(chain_sel(spec, 'approve(address,uint256)'))};\n"
-                    f"const SEL_{name}_c = {json.dumps(chain_sel(spec, sig2))};")
+        sel_decl = (f"const SEL_stream_create_a = {json.dumps(chain_sel(spec, 'approve(address,uint256)'))};\n"
+                    f"const SEL_stream_create_c = {json.dumps(chain_sel(spec, sig2))};")
+    elif name == "subscribe":
+        # MCP-1: three legs — approve allowance (ticket*laps, NOT max-uint), setMandate (the bounded
+        # authorization), then createStreamFor (first lap). `revoke` hangs off the returned object
+        # rather than being a fourth leg, because it is the UNDO, not part of the flow.
+        _v1 = spec.V1_APPROVE_REVOKE[0]
+        seg = [
+            "  const factory = ADDR['g2a-subscriptions'];",
+            "  const ticket = BigInt(amount), laps = BigInt(periods);",
+            "  const period = _hexToBig(end) - _hexToBig(start);",
+            "  const approve = mkLeg(_addr(token), 'approve(address,uint256)', SEL_subscribe_a, [factory, ticket * laps]);",
+            "  const mandate = mkLeg(factory, 'setMandate(address,address,uint256,uint64,uint32,uint64)', SEL_subscribe_m, [_addr(recipient), _addr(token), ticket, period, Number(laps), _hexToBig(start)]);",
+            f"  const create = mkLeg(factory, {json.dumps(spec.CALLS['subscribe']['sigs'][2])}, SEL_subscribe_c, [_addr(payer), _addr(recipient), _addr(token), ticket, _hexToBig(start), _hexToBig(end)]);",
+            "  const legs: Leg[] = [approve, mandate, create];",
+            "  const revoke: Leg[] = [",
+            "    mkLeg(factory, 'disarmMandate(address,address)', SEL_subscribe_d, [_addr(recipient), _addr(token)]),",
+            f"    mkLeg(_addr(token), {json.dumps(_v1['sig'])}, {json.dumps(chain_sel(spec, _v1['sig']))}, [_addr({json.dumps(_v1['to'])}), 0n], 'the OLD allowance'),",
+            "  ];",
+            "  return { calls: legs, revoke };",
+        ]
+        sel_decl = (f"const SEL_subscribe_a = {json.dumps(chain_sel(spec, 'approve(address,uint256)'))};\n"
+                    f"const SEL_subscribe_m = "
+                    f"{json.dumps(chain_sel(spec, spec.CALLS['subscribe']['sigs'][1]))};\n"
+                    f"const SEL_subscribe_c = {json.dumps(chain_sel(spec, spec.CALLS['subscribe']['sigs'][2]))};\n"
+                    f"const SEL_subscribe_d = "
+                    f"{json.dumps(chain_sel(spec, spec.CALLS['disarm_mandate']['sigs'][0]))};")
     elif name == "swap":
         seg = [
             "  const params = [_hexToBig(amount_in), _hexToBig(amount_out_min), _hops7(hops), _addr(recipient), _hexToBig(deadline)];",
@@ -580,7 +606,9 @@ def _ts_fn(name: str, d: dict, spec, tools) -> str:
         }[name]
         seg = [f"  const legs: Leg[] = [mkLeg(ADDR['{c['to']}'], {json.dumps(c['sigs'][0])}, {json.dumps(chain_sel(spec, c['sigs'][0]))}, {args})];"]
         sel_decl = ""
-    body = "\n".join(seg) + "\n  return legs;"
+    # `subscribe` returns its undo alongside the flow; every other tool is a bare Leg[].
+    ret_ty = "{ calls: Leg[]; revoke: Leg[] }" if name == "subscribe" else "Leg[]"
+    body = "\n".join(seg) + ("" if name == "subscribe" else "\n  return legs;")
     doc = d["description"]
     # tool wrapper calls the plain fn with explicit named args (avoids the untyped-spread error)
     call_args = ", ".join(f"a.{p}" for p in params)
@@ -588,7 +616,7 @@ def _ts_fn(name: str, d: dict, spec, tools) -> str:
         f"// {name}: {c['verb']}\n"
         + (f"{sel_decl}\n" if sel_decl else "")
         + f"/** {doc} */\n"
-        + f"export function {name}({', '.join(sig_parts)}): Leg[] {{\n{body}\n}}\n\n"
+        + f"export function {name}({', '.join(sig_parts)}): {ret_ty} {{\n{body}\n}}\n\n"
         + f"export const {name}_tool = tool({{\n"
         + f"  description: {json.dumps(doc)},\n"
         + f"  parameters: jsonSchema({json.dumps(d['parameters'])}),\n"

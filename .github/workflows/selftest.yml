@@ -1,0 +1,79 @@
+# selftest.yml — the MCP server's own gate, on both supported Pythons, against a clean install.
+#
+# WHY CI AND NOT JUST "run it locally": the audit's MCP-4 was that there were no pins at all, so
+# `selftest.py` — the ONE gate that proves the tool surface matches the published spec — could not run
+# on a machine that had not already been hand-provisioned with mcp/httpx/eth-abi. A gate that only
+# runs on the author's box is not a gate. This job installs from `pyproject.toml` into an empty venv,
+# so a missing or floating dependency is a red run, not a silent local accident.
+#
+# It runs on 3.11 AND 3.12 because the package claims `requires-python >= 3.11`; a claim exercised on
+# one interpreter is decoration.
+#
+# The structural teeth (address-book hash, selector re-derivation, tool-surface list) are offline. The
+# chain rows and the live-spec fetch degrade to [skip] on a runner without egress, which is why the
+# `--strict` run below additionally asserts a minimum PASS count: a wobble to all-skips must not read
+# as green.
+name: selftest
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: selftest (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+
+      - name: install (pinned, from pyproject)
+        run: |
+          set -euo pipefail
+          python -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -e .
+
+      - name: address book is re-vendored (hash pin matches)
+        run: python - <<'EOF'
+          import hashlib, re, sys
+          pin = re.search(r'_ADDR_SHA256 = "([0-9a-f]{64})"', open("spec.py").read()).group(1)
+          have = hashlib.sha256(open("fleet_addr/addresses.json", "rb").read()).hexdigest()
+          print(f"pin {pin}\nhave {have}")
+          sys.exit(0 if pin == have else 1)
+          EOF
+
+      - name: selftest (offline structural teeth)
+        run: |
+          set -o pipefail
+          .venv/bin/python selftest.py 2>&1 | tee /tmp/gate.log
+          # COUNT TEETH: a run where every tooth skipped is still exit 0, so require a floor. The
+          # structural set alone is > 20 PASS rows; live rows only add to it.
+          n=$(grep -c '^\[PASS\]' /tmp/gate.log || true)
+          echo "PASS rows: $n"
+          [ "$n" -ge 20 ] || { echo "REFUSING: only $n PASS rows (floor 20)"; exit 1; }
+
+      - name: calldata for every tool (no RPC)
+        run: .venv/bin/python dryrun.py --nosim | tail -3
+
+      - name: generated plugins are in sync
+        run: |
+          if [ -f plugins/gen.py ]; then
+            .venv/bin/python plugins/gen.py --check
+            .venv/bin/python plugins/verify.py
+          else
+            echo "no plugins/ in this tree — skipped"
+          fi

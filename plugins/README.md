@@ -8,7 +8,7 @@ and emits all four. The calldata is always built the same way A1 builds it.
 ```
 python3 gen.py           # regenerate all four artifacts
 python3 gen.py --check   # exit 1 if any is stale (staleness gate)
-python3 verify.py        # the drift gate — 44 checks, 0 failed
+python3 verify.py        # the drift gate — 46 checks, 0 failed
 ```
 
 ## What it emits
@@ -22,7 +22,8 @@ python3 verify.py        # the drift gate — 44 checks, 0 failed
 
 The four share ONE descriptor. A stranger copies **one file** — `vercel-ai/fleet.ts` — points it at
 their rail, and gets a tolled call: each money tool returns the exact legs to send, prerequisite first
-(e.g. `stream_create` emits `approve` then `createStream`).
+(e.g. `stream_create` emits `approve` then `createStream`). `subscribe` emits **three**: allowance →
+`setMandate` (the bounded authorization) → first lap, and hangs the undo off `revoke`.
 
 ## The one plugin — `vercel-ai/fleet.ts`
 
@@ -51,9 +52,10 @@ arg **width** matters: `setFeeBps` is `uint16`. Retyping `setFeeBps(uint256)` si
 The calldata authority is the SDK (`products/sdk/src`) / A1's `chain.build_call`; the plugin re-encodes
 nothing. Lane-10 rule applies: settled predicate is `paid(id).at != 0` / `isPaid()`, never `amount>0`.
 
-## What the gate proves (`verify.py`, 44 checks)
+## What the gate proves (`verify.py`, 46 checks)
 
-1. Every generated tool's calldata == A1's own `server.py` output — byte-for-byte, all 10 tools.
+1. Every generated tool's calldata == A1's own `server.py` output — byte-for-byte, all 10 tools,
+   with `subscribe.revoke` compared separately (it rides outside `calls` on both sides).
 2. Every `openai/tools.json` selector re-derives from the A1 sig (keccak) + callee == A1 address.
 3. `gen.py --check` — files in sync with A1.
 3b. **Staleness guard has teeth** — a wrong-but-known callee (the p2→g2b class) makes `gen.py --check`
@@ -85,4 +87,4 @@ A1 state an artifact came from — A1 is a shared surface edited by other lanes.
 
 `vercel-ai/fleet.ts` needs `ai` + a `jsonSchema` at the call site (AI SDK ≥ v4). The other three are
 import-time-safe without the framework (they degrade to plain functions if it's absent). Nothing
-deployed. Owner addresses pinned from A1 `spec.py`, itself copied from `PRODUCTS.json`.
+deployed. Owner addresses are A1's `spec.ADDR`, resolved from the hash-pinned SDK address book.

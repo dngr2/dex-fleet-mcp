@@ -103,8 +103,9 @@ _D_pay_deposit_addr = ''
 _D_pay_owner = ''
 _D_pay_dry_run = True
 _D_pay_expect_fee_bps = -1
+_D_pay_max_amount = -1
 @_fw_decorator
-def pay(destination, token=_D_pay_token, amount=_D_pay_amount, deposit_addr=_D_pay_deposit_addr, owner=_D_pay_owner, dry_run=_D_pay_dry_run, expect_fee_bps=_D_pay_expect_fee_bps) -> str:
+def pay(destination, token=_D_pay_token, amount=_D_pay_amount, deposit_addr=_D_pay_deposit_addr, owner=_D_pay_owner, dry_run=_D_pay_dry_run, expect_fee_bps=_D_pay_expect_fee_bps, max_amount=_D_pay_max_amount) -> str:
     """PAY: the real two-step. Leg 1 register(destination) on the p2 Registry (mints your deposit address, idempotent per nonce); Leg 2 transfer(token, depositAddr, amount) on the TOKEN (or a native value-send when token is the zero address). depositAddr is VERIFIED against registry.predict(owner, destination) before returning. WARNs if read_fee wasn't called this session.
 
 callee: 0x417c41d406c61E09958032Cd77338fc1F1ac7D45"""
@@ -118,8 +119,9 @@ _D_escrow_create_amount = 0
 _D_escrow_create_hashlock = ''
 _D_escrow_create_timeout = 0
 _D_escrow_create_dry_run = True
+_D_escrow_create_max_amount = -1
 @_fw_decorator
-def escrow_create(counterparty, token=_D_escrow_create_token, amount=_D_escrow_create_amount, hashlock=_D_escrow_create_hashlock, timeout=_D_escrow_create_timeout, dry_run=_D_escrow_create_dry_run) -> str:
+def escrow_create(counterparty, token=_D_escrow_create_token, amount=_D_escrow_create_amount, hashlock=_D_escrow_create_hashlock, timeout=_D_escrow_create_timeout, dry_run=_D_escrow_create_dry_run, max_amount=_D_escrow_create_max_amount) -> str:
     """Create an escrow (g2b) locked against a hashlock or arbiter; funds sit in the contract until release or refund. `hashlock` is ALREADY bytes32 — call escrow_new_secret() first and pass its `hashlock`; the matching `preimage` goes to escrow_release (never re-hash it).
 
 callee: 0x4B05fA6aD0Ba0D0120Dce19Ce34dde6d1316C237"""
@@ -142,8 +144,9 @@ _D_stream_create_amount = 0
 _D_stream_create_start = 0
 _D_stream_create_end = 0
 _D_stream_create_dry_run = True
+_D_stream_create_max_amount = -1
 @_fw_decorator
-def stream_create(recipient, token=_D_stream_create_token, amount=_D_stream_create_amount, start=_D_stream_create_start, end=_D_stream_create_end, dry_run=_D_stream_create_dry_run) -> str:
+def stream_create(recipient, token=_D_stream_create_token, amount=_D_stream_create_amount, start=_D_stream_create_start, end=_D_stream_create_end, dry_run=_D_stream_create_dry_run, max_amount=_D_stream_create_max_amount) -> str:
     """Create a payment stream (g2a): approve the factory, then createStream(recipient, token, amount, start, end); the recipient withdraw()s as it vests.
 
 callee: 0x3882A049ee99B96Ea68DF317713ed76008b9A075"""
@@ -157,29 +160,40 @@ _D_subscribe_start = 0
 _D_subscribe_end = 0
 _D_subscribe_periods = 1
 _D_subscribe_dry_run = True
+_D_subscribe_max_amount = -1
 @_fw_decorator
-def subscribe(payer, recipient, token=_D_subscribe_token, amount=_D_subscribe_amount, start=_D_subscribe_start, end=_D_subscribe_end, periods=_D_subscribe_periods, dry_run=_D_subscribe_dry_run) -> str:
-    """Subscribe (g2a): approve(factory_v2, ticket*periods) then createStreamFor on the v2 StreamFactory. Includes a `revoke` leg against the PAUSED v1 factory — send it if you granted the old allowance before the migration. A keeper then fires createStreamFor once per period.
+def subscribe(payer, recipient, token=_D_subscribe_token, amount=_D_subscribe_amount, start=_D_subscribe_start, end=_D_subscribe_end, periods=_D_subscribe_periods, dry_run=_D_subscribe_dry_run, max_amount=_D_subscribe_max_amount) -> str:
+    """Subscribe (g2a): approve(factory, ticket*periods) then setMandate(...) then createStreamFor. The MANDATE is the bounded authorization — while it is armed the factory lets ANYONE fire a lap strictly within its limits (ticket, period, laps, monotonic t0), so the keeper needs no standing grant. Also returns a `revoke` block (disarmMandate + approve(v1,0)).
 
 callee: 0x3882A049ee99B96Ea68DF317713ed76008b9A075"""
     factory = spec.ADDR['g2a-subscriptions']
-    approve = _build_sig('subscribe', 'approve(address,uint256)', token, [factory, int(amount) * int(periods)])
-    create = _build_sig('subscribe', 'createStreamFor(address,address,address,uint256,uint64,uint64)', factory, [payer, recipient, token, int(amount), int(start), int(end)])
+    ticket, laps = int(amount), int(periods)
+    period = int(end) - int(start)
+    approve = _build_sig('subscribe', 'approve(address,uint256)', _addr(token), [factory, ticket * laps])
+    mandate = _build_sig('subscribe', 'setMandate(address,address,uint256,uint64,uint32,uint64)', factory, [_addr(recipient), _addr(token), ticket, period, laps, int(start)])
+    create = _build_sig('subscribe', 'createStreamFor(address,address,address,uint256,uint64,uint64)', factory, [_addr(payer), _addr(recipient), _addr(token), ticket, int(start), int(end)])
     _v1 = spec.V1_APPROVE_REVOKE[0]
-    revoke = _build_sig('subscribe', _v1['sig'], _addr(token), [_addr(_v1['to']), 0])
-    return _result('subscribe', [approve, create]) + _json({'tool': 'subscribe.revoke', 'calls': [revoke]})
+    revoke = [
+        _build_sig('disarm_mandate', spec.CALLS['disarm_mandate']['sigs'][0], factory, [_addr(recipient), _addr(token)]),
+        _build_sig('disarm_mandate', _v1['sig'], _addr(token), [_addr(_v1['to']), 0]),
+    ]
+    return _json({'tool': 'subscribe', 'chain': {'id': spec.CHAIN_ID},
+                  'calls': [approve, mandate, create],
+                  'revoke': {'note': 'disarm + clear the v1 allowance; either alone leaves half the authorization live', 'calls': revoke}})
 _D_swap_deadline = 0
 _D_swap_token_in = ''
 _D_swap_dry_run = True
+_D_swap_max_amount = -1
 @_fw_decorator
-def swap(amount_in, amount_out_min, hops, recipient, deadline=_D_swap_deadline, token_in=_D_swap_token_in, dry_run=_D_swap_dry_run) -> str:
+def swap(amount_in, amount_out_min, hops, recipient, deadline=_D_swap_deadline, token_in=_D_swap_token_in, dry_run=_D_swap_dry_run, max_amount=_D_swap_max_amount) -> str:
     """Swap (p3 router). Hops are handed in; the router takes a 5 bps fee on INPUT to treasury. amount_out_min is your slippage guard.
 
 callee: 0x036645cA607Dc8075Ae9B12A3474C00A82c306e6"""
     return _result('swap', [_build('swap', [[int(amount_in), int(amount_out_min), _hops7(hops), recipient, int(deadline)]])])
 _D_sweep_dust_dry_run = True
+_D_sweep_dust_max_amount = -1
 @_fw_decorator
-def sweep_dust(tokens, hops, min_out, dry_run=_D_sweep_dust_dry_run) -> str:
+def sweep_dust(tokens, hops, min_out, dry_run=_D_sweep_dust_dry_run, max_amount=_D_sweep_dust_max_amount) -> str:
     """Sweep dust to USDC (f1c). One tx: pull balances via Permit2, one-hop each token to USDC, deliver to you. Needs Permit2 approvals first.
 
 callee: 0x8c38c2bbECa7575c24ACEf1d907Aa1F4f43CbFB9"""
@@ -199,8 +213,9 @@ callee: 0x410396662089a26C801c54818CCd59640eFCaf77"""
     _args = [_norm, int(nonce) if nonce >= 0 else 0, int(deadline), sig or ('0x' + '00' * 65)]
     return _result('sponsored_call', [_build_sig('sponsored_call', spec.CALLS['sponsored_call']['sigs'][0], _to, _args)])
 _D_mint_receipt_dry_run = True
+_D_mint_receipt_value_wei = -1
 @_fw_decorator
-def mint_receipt(escrow, dry_run=_D_mint_receipt_dry_run) -> str:
+def mint_receipt(escrow, dry_run=_D_mint_receipt_dry_run, value_wei=_D_mint_receipt_value_wei) -> str:
     """Mint the one proof-of-payment receipt NFT (g4b) for a SETTLED escrow, to the payer. Payable: send mintFeeWei.
 
 callee: 0xAE5951d25FEDD06aB7e124e91Dac3AC20f5e7cAF"""

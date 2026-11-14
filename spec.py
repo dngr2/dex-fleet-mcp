@@ -2,9 +2,10 @@
 """spec.py — the ONE place the MCP surface is pinned to the live products.
 
 DISCIPLINE (why this file exists):
-  * Addresses are COPIED from `products/dex-site/PRODUCTS.json` (the repo's one edit point), never
-    retyped — GOTCHA #73. When that file is reachable it is read live; the pinned fallback below is
-    only for a machine without the repo checkout, and `selftest.py` diffs the two.
+  * Addresses come from the SDK's address book (`products/sdk/addresses.json`), never retyped —
+    GOTCHA #73. A byte copy is vendored at `fleet_addr/addresses.json` and SHA-256-PINNED; a mismatch
+    fails import. PRODUCTS.json is cross-checked against it, and the `_PINNED` literal below is
+    checked against it too, so all three routes must agree before a tool can emit a callee.
   * Selector strings are the EXACT `call:` signatures published in `site/llms.txt`; `chain.selector`
     derives the 4-byte value via keccak, so a typo in the sig cannot hide (GOTCHA #73/#131).
   * The MCP tool set must not drift from the published spec — GOTCHA #131 family. `selftest.py`
@@ -12,6 +13,7 @@ DISCIPLINE (why this file exists):
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 
@@ -29,7 +31,7 @@ USDC_DECIMALS = 6
 TREASURY = "0x5c0fc0917260A0656D253f1625053e3E6Dd2Ef3c"
 EXPLORER = "https://basescan.org"
 
-# --- addresses: read live from PRODUCTS.json when present, else the pinned copy -------------------
+# --- addresses: the SDK book (hash-pinned) is the source; _PINNED is a CHECKED no-book fallback ----
 _PINNED = {
     "p2-forwarder": "0x417c41d406c61E09958032Cd77338fc1F1ac7D45",
     "g2b-escrow": "0x4B05fA6aD0Ba0D0120Dce19Ce34dde6d1316C237",
@@ -84,6 +86,76 @@ SELFFUND_SIG = "createStreamSelfFunded(address,address,address,uint256,uint64,ui
 V1_F1A = "0x036645cA607Dc8075Ae9B12A3474C00A82c306e6"
 
 
+# --- addresses: ONE machine-readable source, hash-pinned, checked at import ------------------------
+# The pinned dict below used to be the LOAD-BEARING copy in any checkout without PRODUCTS.json, and it
+# has drifted twice in two rounds — a hand-copied address that nothing diffs is just a literal with a
+# comment attached (GOTCHA #73's whole family). So:
+#
+#   * The SOURCE OF TRUTH is the SDK's address book (`products/sdk/addresses.json`), the fleet's one
+#     machine-readable multi-chain map. A byte copy of it is vendored at `fleet_addr/addresses.json`;
+#     it is read through `importlib.resources`, so resolution does not depend on cwd or a relative path.
+#   * The copy is HASH-PINNED (`_ADDR_SHA256`). A mismatch is a START-UP FAILURE, not a warning: an
+#     address book that moved under us and was not re-vendored means every callee in this file is of
+#     unknown age. `MCP_ADDR_HASH=skip` downgrades it to a warning when you are mid-repoint.
+#   * PRODUCTS.json, when reachable, must AGREE with the book — a second independent tooth, because the
+#     two drift by different routes (a redeploy bumps one, a hand edit bumps the other).
+#   * `_PINNED` survives only as the no-book fallback, and it is now *checked* against the book on
+#     every load — a stale pin can no longer sit in the file looking authoritative.
+#
+# Repoint procedure: `python3 tools/sync-addresses.py` (copies the SDK book + prints the new hash).
+_ADDR_SHA256 = "1f2fe643fc38c2644512805fdfd8daa6583a662a45fd5f10a4391d60dd924027"
+_ADDR_REL = ("fleet_addr", "addresses.json")
+
+
+class SpecDrift(RuntimeError):
+    """The address book does not match its pin, or PRODUCTS.json disagrees with it. Fatal at import."""
+
+
+def _book_bytes() -> bytes:
+    """The vendored address book, via importlib.resources (cwd-independent, works in both layouts)."""
+    try:
+        from importlib.resources import files
+        return (files("fleet_addr") / _ADDR_REL[1]).read_bytes()
+    except Exception:  # noqa: BLE001 — frozen zip / odd loader / running from a bare file
+        here = os.path.dirname(os.path.abspath(__file__))
+        with open(os.path.join(here, *_ADDR_REL), "rb") as fh:
+            return fh.read()
+
+
+# SDK key -> product id. ONLY the money-facing surfaces; `native`/`feeRecipient`/the 7702 pair are
+# handled separately below (they are not products).
+_ADDR_MAP = {
+    "p2-forwarder": "paymentRail",
+    "f1a-payment-links": "requestRegistry",
+    "p3-router": "swapRouter",
+    "g2a-streams": "streamRail",
+    "g2a-subscriptions": "streamRail",     # the shared factory — same contract, two product entries
+    "g2b-escrow": "escrowRail",
+    "g4b-receipts": "receiptNft",
+    "settlement": "settlementRegistry",
+    "fleet-executor": "fleetExecutor",
+    "x402": "x402Facilitator",
+    "fleet-paymaster": "fleetPaymaster",
+    "g4c-toll-registry": "tollRegistry",
+    "f1c-duster": "v2.duster",             # duster only exists on the v2 (current) line
+}
+_ALIAS = {"miniapp": "p2-forwarder"}       # UI over the Registry, no address of its own
+
+
+def _dig(d: dict, dotted: str):
+    cur = d
+    for part in dotted.split("."):
+        cur = cur[part]
+    return cur
+
+
+def _from_book(book: dict) -> dict:
+    addr = {pid: _dig(book, key) for pid, key in _ADDR_MAP.items()}
+    for alias, parent in _ALIAS.items():
+        addr[alias] = addr[parent]
+    return addr
+
+
 def _locate(*cands: str) -> str | None:
     """First existing path among `cands` (relative to this file's dir), else None.
 
@@ -102,22 +174,62 @@ def _locate(*cands: str) -> str | None:
 
 _PRODUCTS_JSON = _locate(os.path.join("..", "dex-site", "PRODUCTS.json"),
                          os.path.join("catalog", "PRODUCTS.json"))
+# The SDK book itself, for the monorepo byte-identity check (absent on a standalone clone, where the
+# vendored copy IS the book).
+_SDK_BOOK = _locate(os.path.join("..", "sdk", "addresses.json"))
 
 
 def _load_products() -> dict:
-    """Live-copy ADDRESS-BEARING products; fall back to the pin only if the repo file is absent.
+    """Book -> addresses, with the hash gate and the PRODUCTS.json cross-check. Raises SpecDrift.
 
-    PRODUCTS.json also lists source-only surfaces (sdk, mcp-server, x402, …) whose `contract` is
-    null — they carry no callee, so they must NOT enter ADDR (else downstream `.lower()` on None).
+    Falls back to `_PINNED` only if NO book is present at all (a hand-assembled directory), and says
+    so on stderr so a green run cannot be mistaken for a checked one.
     """
     try:
-        d = json.load(open(_PRODUCTS_JSON))
-        return {p["id"]: p["contract"] for p in d["products"] if p.get("contract")}
-    except Exception:
+        raw = _book_bytes()
+    except OSError:
+        import sys
+        print("[spec] WARNING: no address book — falling back to the literal _PINNED map (unchecked)",
+              file=sys.stderr)
         return dict(_PINNED)
+
+    got = hashlib.sha256(raw).hexdigest()
+    if got != _ADDR_SHA256:
+        msg = (f"address book hash mismatch\n  have {got}\n  want {_ADDR_SHA256}\n"
+               f"  fix: python3 tools/sync-addresses.py   (or MCP_ADDR_HASH=skip to run anyway)")
+        if os.environ.get("MCP_ADDR_HASH", "") == "skip":
+            import sys
+            print(f"[spec] WARNING: {msg}", file=sys.stderr)
+        else:
+            raise SpecDrift(msg)
+
+    book = json.loads(raw)["base"]
+    addr = _from_book(book)
+
+    # the pin must still agree — otherwise the fallback path is a time bomb, not a fallback
+    stale = {k: (v, addr.get(k)) for k, v in _PINNED.items() if addr.get(k, "").lower() != v.lower()}
+    if stale:
+        raise SpecDrift(f"_PINNED disagrees with the address book (stale literal): {stale}")
+    # and PRODUCTS.json, where present, must agree too (independent route to the same drift)
+    if _PRODUCTS_JSON:
+        for p in json.load(open(_PRODUCTS_JSON))["products"]:
+            pid, want = p["id"], p.get("contract")
+            have = addr.get(pid)
+            if want and have and want.lower() != have.lower():
+                raise SpecDrift(f"PRODUCTS.json `{pid}` = {want} but the address book says {have}")
+    return addr
 
 
 ADDR = _load_products()
+# The treasury is not a product but is the same class of hand-copied literal, so it comes from the
+# book as well (feeRecipient). `_PINNED`-only mode keeps the literal above.
+_TREASURY_BOOK = None
+try:
+    _TREASURY_BOOK = json.loads(_book_bytes())["base"]["feeRecipient"]
+except OSError:
+    pass
+if _TREASURY_BOOK:
+    TREASURY = _TREASURY_BOOK
 
 # --- the call table: ONE primary money verb per product, sig strings VERBATIM from llms.txt --------
 # `sigs` are what the tool emits (a multi-call tool lists its prerequisite first, e.g. approve).
@@ -174,8 +286,33 @@ CALLS = {
     "subscribe": {
         "product": "g2a-subscriptions",
         "to": "g2a-subscriptions",
-        "sigs": ["approve(address,uint256)", "createStreamFor(address,address,address,uint256,uint64,uint64)"],
-        "verb": "approve(factory, ticket*periods) is the whole mandate; a keeper calls createStreamFor once per period. `revoke` returns the v1 approve(factory_v1, 0) leg",
+        "sigs": ["approve(address,uint256)", "setMandate(address,address,uint256,uint64,uint32,uint64)",
+                 "createStreamFor(address,address,address,uint256,uint64,uint64)"],
+        "verb": "bounded path: approve(factory, ticket*periods) is the allowance, setMandate(recipient, token, ticket, period, laps, t0) is the on-chain authorization. A keeper then fires createStreamFor once per period; without a mandate the keeper only works while isKeeper is true (the hedge path). `revoke` also emits disarmMandate + approve(v1,0)",
+    },
+    "disarm_mandate": {
+        "product": "g2a-subscriptions",
+        "to": "g2a-subscriptions",
+        "sigs": ["disarmMandate(address,address)", "approve(address,uint256)"],
+        "verb": "clear a published mandate (disarmMandate(recipient, token)) AND the allowance (approve(factory, 0)); either alone leaves half the authorization live",
+    },
+    "pay_x402": {
+        "product": "x402",
+        "to": "x402",
+        "sigs": ["markPaid(bytes32,address,address,uint256)", "verify(bytes32,address,address,uint256)"],
+        "verb": "the gated-writer half of an HTTP-402 flow: markPaid(paymentId, to, token, amount) after the rail settles, and the server's verify(paymentId, to, token, minAmount) VIEW that gates the resource",
+    },
+    "read_402_challenge": {
+        "product": "x402",
+        "to": "",
+        "sigs": [],
+        "verb": "READ: fetch an x402-protected URL and return its 402 challenge (rail, to, token, amount, memo, facilitator) without paying — the discovery step before pay_x402(url=…)",
+    },
+    "read_capabilities": {
+        "product": "",
+        "to": "",
+        "sigs": [],
+        "verb": "READ: for a payer+token+spender, the balance / allowance / isKeeper / paused state a money verb needs, plus a pass/fail line per leg",
     },
     "swap": {
         "product": "p3-router",
@@ -231,6 +368,14 @@ READS = {
 QUOTER = "0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a"
 QUOTER_SIG = "quoteExactInputSingle((address,address,uint256,uint24,uint160))"
 TRANSFER_SIG = "transfer(address,uint256)"
+
+# IPaymentRail.pay — the CLIENT leg of a 402 (products/rails/src/IPaymentRail.sol:37, verbatim). No
+# implementation is deployed yet, so it is NOT a published `call:` on any product row; a challenge
+# names its own `rail` and this sig is emitted only against THAT address. The selector is still
+# keccak-derived at the use site (0x68abdc82), never typed. x402 README §"pay_for_402" is the flow.
+PAY_RAIL_SIG = "pay(address,address,uint256,bytes32,address)"
+# The header the retry carries (x402 README step 4) — named so a client does not have to re-read prose.
+X402_HEADER = "X-PAYMENT"
 
 # --- fee getters: the LIVE read per product, with the #144 hazard named explicitly ------------------
 # p3 ships BOTH `feeBps` (the take, immutable=5) AND `MAX_FEE_BPS` (=10000, a DENOMINATOR). Never

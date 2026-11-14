@@ -9,8 +9,8 @@ leave this repo **green against a stale catalog** while the live `PRODUCTS.json`
 stale-resolve-reads-as-authority (GOTCHA #208 family). The gates are real, but they prove agreement
 with *this copy*, not with the live site.
 
-**When addresses change (e.g. the v2 factories fire), bump BOTH in the same commit:**
-`spec.py`'s `_PINNED` map **and** `catalog/PRODUCTS.json` (and `catalog/llms.txt` if sigs move), then
-re-push. Whoever owns the redeploy should send the new addresses; re-run the cold-clone gate after.
+**When addresses change, one command re-vendors everything:** `python3 tools/sync-addresses.py` in the
+monorepo rewrites `fleet_addr/addresses.json` and its SHA-256 pin in `spec.py`; `publish.sh` refreshes
+this directory in the same push. Nothing here is hand-edited.
 
-Snapshot taken 2026-11-13 (the new-line repoint; `spec.py` pins agree), md5 `70644208…` on PRODUCTS.json. Previous snapshot was 2026-11-09 at `83eed74`.
+Snapshot taken 2026-11-14T01:32Z, PRODUCTS.json md5 `70644208c4…`.

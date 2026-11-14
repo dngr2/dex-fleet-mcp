@@ -1,0 +1,126 @@
+{
+  "$comment": "Fleet contract addresses \u2014 MULTI-CHAIN, copied from source docs (never retyped \u2014 GOTCHA #73). Primary source: products/revenue/cells.json (p2-registry + p3-router on 10 chains, with code_bytes/deploy_tx per row). Secondary: products/revenue/FEE-RAISE-PLAN.md (g2a-OP 0x61AB1942\u2026), products/revenue/OP-RAIL-PLAN.md (OP USDC + g2a-OP), products/g2b-escrow/MULTICHAIN-DEPLOY-EVIDENCE.md (g2a/g2b on opBNB/Gnosis/Scroll), products/*/KEY-RECORD*.md, and exec3/GATE6-MIGRATION-PLAN.md \u00a71 (the v2 line). Every 40-hex value below was LIVE code-probed on its chain this run AND re-EIP-55'd via `cast to-check-sum-address` (2026-11-10). `native` is the zero sentinel. The rails interface (src/addressBook.ts) reads these live and checksums each on read.",
+  "$note_v2_base_only": "The nested `v2` block is the next-generation line from exec3/GATE6-MIGRATION-PLAN.md \u00a71 \u2014 BASE ONLY (chainId 8453). The other 10 chains stay at each chain's top level (see $note_new_line: optimism and unichain there now carry the SAME new-line addresses as base, not v1). A reader must NOT assume v2 is multi-chain. Every v2 addr was live code-probed 2026-11-10 (non-zero runtime, keccak below) and is EIP-55 valid.",
+  "$note_new_line": "RELAUNCH 2026-11-12: the new line (p2 0x417c41d4\u2026, p3 0x036645cA\u2026, g2a 0x3882A049\u2026, g2b 0x4B05fA6a\u2026) is CREATE2 chain-invariant on base + optimism + unichain. Those three chain blocks therefore carry the new line at top level; the eight old chains keep v1. Unichain (chain 130) exists here because NO prior catalog row named it. The bare string is NOT the contract per chain (#95) \u2014 always key on the chain.",
+  "$note_create_invariance": "p2 Registry and p3 Router sit at CHAIN-INDEPENDENT addresses where the same deploy key hit the same nonce (CREATE = keccak(rlp(key,nonce))[12:]). p2 = 0xe9515881\u2026 on ALL 10 chains (4654 B each). p3 = 0xEB28D5cA\u2026 on BASE ONLY; the other 9 chains carry p3 at 0x9651cD59\u2026 (4270 B). \u26a0 0x9651cD59\u2026 is ALSO the Base f1a RequestRegistry (2772 B) \u2014 same bare string, different contract PER CHAIN (#95). Never key on a bare address without the chain.",
+  "base": {
+    "chainId": 8453,
+    "native": "0x0000000000000000000000000000000000000000",
+    "paymentRail": "0x417c41d406c61E09958032Cd77338fc1F1ac7D45",
+    "requestRegistry": "0xeD395024Bba719564bec617b6b42CF6fDC8a252c",
+    "swapRouter": "0x036645cA607Dc8075Ae9B12A3474C00A82c306e6",
+    "streamRail": "0x3882A049ee99B96Ea68DF317713ed76008b9A075",
+    "escrowRail": "0x4B05fA6aD0Ba0D0120Dce19Ce34dde6d1316C237",
+    "receiptNft": "0xAE5951d25FEDD06aB7e124e91Dac3AC20f5e7cAF",
+    "feeRecipient": "0x5c0fc0917260A0656D253f1625053e3E6Dd2Ef3c",
+    "settlementRegistry": "0xdDA0728Ff635B555D2Af471E2821055bE08F9127",
+    "fleetExecutor": "0x410396662089a26C801c54818CCd59640eFCaf77",
+    "x402Facilitator": "0x5849eF6f21fDC21d5194c24ED6c824965A613739",
+    "fleetPaymaster": "0x70A615dDc4cd013Cf4D569Ae3394bF4465229B95",
+    "tollRegistry": "0xc8319D6fbc0A8f1685Df9c567557141A289b7A1b",
+    "v2": {
+      "paymentRail": "0x417c41d406c61E09958032Cd77338fc1F1ac7D45",
+      "requestRegistry": "0xeD395024Bba719564bec617b6b42CF6fDC8a252c",
+      "escrowRail": "0x4B05fA6aD0Ba0D0120Dce19Ce34dde6d1316C237",
+      "receiptNft": "0xAE5951d25FEDD06aB7e124e91Dac3AC20f5e7cAF",
+      "streamRail": "0x3882A049ee99B96Ea68DF317713ed76008b9A075",
+      "swapRouter": "0x036645cA607Dc8075Ae9B12A3474C00A82c306e6",
+      "duster": "0x8c38c2bbECa7575c24ACEf1d907Aa1F4f43CbFB9",
+      "sponsorTarget7702": "0xb8381fF6b76726e989a7FFF358dBc3640d78d684",
+      "p3cDelegate7702": "0xDE6B56287edc66212037D2B7Af21c0825AA7AdC9",
+      "feeRecipient": "0x5c0fc0917260A0656D253f1625053e3E6Dd2Ef3c",
+      "source": "exec3/GATE6-MIGRATION-PLAN.md \u00a71 (re-point table A\u2013I); all 9 live-probed 2026-11-10. p3cDelegate7702 authority = 0x68B7BB71\u20269890, sponsorTarget7702 authority = 0xA3c1eEEB\u202677C0 (re-auth pending, \u00a74)."
+    },
+    "source": "products/revenue/cells.json (p2-registry row, p3-router row, g2a-streams row, g2b-escrow row, g4b-receipts row); products/p2-forwarder/KEY-RECORD.md; products/f1a-payment-links/VERIFY-REPORT-exec4.md (RequestRegistry 0x9651cD59\u2026, 2772 B, p2Registry()==0xe9515881\u2026); products/settlement/src/SettlementRegistry.sol; products/fleet-executor/README.md; products/x402/src/x402Facilitator.sol; products/fleet-paymaster/README.md; products/g4c-toll-registry/README.md."
+  },
+  "optimism": {
+    "chainId": 10,
+    "native": "0x0000000000000000000000000000000000000000",
+    "paymentRail": "0x417c41d406c61E09958032Cd77338fc1F1ac7D45",
+    "swapRouter": "0x036645cA607Dc8075Ae9B12A3474C00A82c306e6",
+    "streamRail": "0x3882A049ee99B96Ea68DF317713ed76008b9A075",
+    "escrowRail": "0x4B05fA6aD0Ba0D0120Dce19Ce34dde6d1316C237",
+    "feeRecipient": "0x5c0fc0917260A0656D253f1625053e3E6Dd2Ef3c",
+    "source": "products/revenue/cells.json (p2 + p3 rows); products/revenue/FEE-RAISE-PLAN.md \u00a7CLOSED (g2a-OP 0x61AB1942\u2026 9385 B; g2b-OP 0x80793a7d\u2026 7794 B). NOTE: no requestRegistry (f1a is Base-only \u2014 on OP this string is the P3 Router); no receiptNft (g4b is Base-only, live probe 0 bytes on OP)."
+  },
+  "unichain": {
+    "chainId": 130,
+    "native": "0x0000000000000000000000000000000000000000",
+    "paymentRail": "0x417c41d406c61E09958032Cd77338fc1F1ac7D45",
+    "swapRouter": "0x036645cA607Dc8075Ae9B12A3474C00A82c306e6",
+    "streamRail": "0x3882A049ee99B96Ea68DF317713ed76008b9A075",
+    "escrowRail": "0x4B05fA6aD0Ba0D0120Dce19Ce34dde6d1316C237",
+    "feeRecipient": "0x5c0fc0917260A0656D253f1625053e3E6Dd2Ef3c",
+    "source": "products/revenue/cells.json (p2 + p3 + g2a + g2b rows, chain 130); each address read live 2026-11-12 on mainnet.unichain.org AND unichain-rpc.publicnode.com; the router is codehash-equal to the Base new-line copy. No requestRegistry (f1a is Base-only)."
+  },
+  "arbitrum": {
+    "chainId": 42161,
+    "native": "0x0000000000000000000000000000000000000000",
+    "paymentRail": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8",
+    "swapRouter": "0x9651cD591cFe33E1b684e5d8541940e78724c749",
+    "feeRecipient": "0xe218E382F28A094f9f64E903ee3cb1750A7f204B",
+    "source": "products/revenue/cells.json (p2 + p3 rows)."
+  },
+  "linea": {
+    "chainId": 59144,
+    "native": "0x0000000000000000000000000000000000000000",
+    "paymentRail": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8",
+    "swapRouter": "0x9651cD591cFe33E1b684e5d8541940e78724c749",
+    "feeRecipient": "0xe218E382F28A094f9f64E903ee3cb1750A7f204B",
+    "source": "products/revenue/cells.json (p2 + p3 rows)."
+  },
+  "polygon": {
+    "chainId": 137,
+    "native": "0x0000000000000000000000000000000000000000",
+    "paymentRail": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8",
+    "swapRouter": "0x9651cD591cFe33E1b684e5d8541940e78724c749",
+    "feeRecipient": "0xe218E382F28A094f9f64E903ee3cb1750A7f204B",
+    "source": "products/revenue/cells.json (p2 + p3 rows)."
+  },
+  "bsc": {
+    "chainId": 56,
+    "native": "0x0000000000000000000000000000000000000000",
+    "paymentRail": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8",
+    "swapRouter": "0x9651cD591cFe33E1b684e5d8541940e78724c749",
+    "feeRecipient": "0xe218E382F28A094f9f64E903ee3cb1750A7f204B",
+    "source": "products/revenue/cells.json (p2 + p3 rows)."
+  },
+  "opbnb": {
+    "chainId": 204,
+    "native": "0x0000000000000000000000000000000000000000",
+    "paymentRail": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8",
+    "swapRouter": "0x9651cD591cFe33E1b684e5d8541940e78724c749",
+    "streamRail": "0xAdB743dA4A5419C62BCc2cF027da6478Ae70f228",
+    "escrowRail": "0x715114076a45c0102Ae3cb38Bcb89B3211ce591f",
+    "feeRecipient": "0xe218E382F28A094f9f64E903ee3cb1750A7f204B",
+    "source": "products/revenue/cells.json (p2 + p3 rows); products/g2b-escrow/MULTICHAIN-DEPLOY-EVIDENCE.md \u00a7ADDRESSES (g2a 0xAdB743dA\u2026 9385 B, g2b 0x71511407\u2026 7794 B, orphan key nonce 2/3)."
+  },
+  "mantle": {
+    "chainId": 5000,
+    "native": "0x0000000000000000000000000000000000000000",
+    "paymentRail": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8",
+    "swapRouter": "0x9651cD591cFe33E1b684e5d8541940e78724c749",
+    "feeRecipient": "0xe218E382F28A094f9f64E903ee3cb1750A7f204B",
+    "source": "products/revenue/cells.json (p2 + p3 rows)."
+  },
+  "gnosis": {
+    "chainId": 100,
+    "native": "0x0000000000000000000000000000000000000000",
+    "paymentRail": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8",
+    "swapRouter": "0x9651cD591cFe33E1b684e5d8541940e78724c749",
+    "streamRail": "0xAdB743dA4A5419C62BCc2cF027da6478Ae70f228",
+    "escrowRail": "0x715114076a45c0102Ae3cb38Bcb89B3211ce591f",
+    "feeRecipient": "0xe218E382F28A094f9f64E903ee3cb1750A7f204B",
+    "source": "products/revenue/cells.json (p2 + p3 rows); products/g2b-escrow/MULTICHAIN-DEPLOY-EVIDENCE.md \u00a7ADDRESSES (g2a 0xAdB743dA\u2026, g2b 0x71511407\u2026)."
+  },
+  "scroll": {
+    "chainId": 534352,
+    "native": "0x0000000000000000000000000000000000000000",
+    "paymentRail": "0xe9515881fe6976eD9CB55328B8308F6eF7c311a8",
+    "swapRouter": "0x9651cD591cFe33E1b684e5d8541940e78724c749",
+    "streamRail": "0xAdB743dA4A5419C62BCc2cF027da6478Ae70f228",
+    "escrowRail": "0x715114076a45c0102Ae3cb38Bcb89B3211ce591f",
+    "feeRecipient": "0xe218E382F28A094f9f64E903ee3cb1750A7f204B",
+    "source": "products/revenue/cells.json (p2 + p3 rows); products/g2b-escrow/MULTICHAIN-DEPLOY-EVIDENCE.md \u00a7ADDRESSES (g2a 0xAdB743dA\u2026, g2b 0x71511407\u2026)."
+  }
+}

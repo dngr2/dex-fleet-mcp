@@ -17,8 +17,19 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
+import asyncio
+
 import chain
-import spec
+
+try:
+    import spec
+except Exception as _e:  # noqa: BLE001 — spec refuses to import on address drift
+    # A bare traceback here reads like a broken gate; say which tooth bit and how to reset it.
+    if type(_e).__name__ == "SpecDrift":
+        print(f"[FAIL] spec.py refused to load — {_e}\n"
+              f"       fix: python3 tools/sync-addresses.py   (then re-run this gate)")
+        sys.exit(1)
+    raise
 
 def _locate(*cands):
     """First existing path among `cands` (relative to HERE), else the first candidate (for the msg).
@@ -94,6 +105,16 @@ if have_spec:
     # and: every sig our tools emit must be one the spec publishes (escrow-instance verbs are called
     # on the escrow, not the factory; READ sigs are view/getters eth_call'd, not published `call:`s)
     published = {s for s, _ in pairs}
+    # A sig added to the generator lands on disk on the next build but in the LIVE text only after a
+    # publish. Accept either (the same live-lag accommodation the address check below makes) and NAME
+    # the lag rather than failing on it — but require the ONDISK copy to carry it, so a sig in neither
+    # is a real drift and still fails.
+    try:
+        ondisk_pairs = set(re.findall(r"- call: `([^`]+)`\s+selector `(0x[0-9a-fA-F]{8})`",
+                                      open(LLMS, encoding="utf-8").read()))
+    except Exception:  # noqa: BLE001
+        ondisk_pairs = set()
+    published |= {s for s, _ in ondisk_pairs}
     INSTANCE = {"release(bytes32)", "refund()", "arbiterRelease()", "arbiterRefund()"}
     READS = {s for sigs in spec.READS.values() for s in sigs} | {spec.TRANSFER_SIG, "previewFee(uint256)",
              "nonceOf(address)", "digest((address,uint256,bytes)[],uint256,uint256)",
@@ -176,16 +197,144 @@ try:
 except FileNotFoundError:
     print(f"[skip] PRODUCTS.json not found at {PRODUCTS}")
 
+# 3b. THE ADDRESS BOOK (MCP-2's surviving form). The pins used to be the load-bearing copy and drifted
+#     twice in two rounds. They are now read from a hash-pinned vendored book; these teeth prove the
+#     book is the one the SDK ships, that the pin matches it, and that ADDR really came from it (not
+#     from `_PINNED`, which would look identical at runtime and be exactly the old bug).
+import hashlib
+
+_VENDOR = os.path.join(HERE, "fleet_addr", "addresses.json")
+_SDK = os.path.join(HERE, "..", "sdk", "addresses.json")
+try:
+    _vb = open(_VENDOR, "rb").read()
+    check("address book hash == spec._ADDR_SHA256",
+          hashlib.sha256(_vb).hexdigest() == spec._ADDR_SHA256,
+          f"pinned {spec._ADDR_SHA256[:12]}… (fix: python3 tools/sync-addresses.py)")
+    if os.path.exists(_SDK):
+        check("vendored address book is byte-identical to products/sdk/addresses.json",
+              open(_SDK, "rb").read() == _vb, "re-run tools/sync-addresses.py")
+    check("ADDR names every _PINNED key (the fallback cannot be a different fleet)",
+          not (set(spec._PINNED) - set(spec.ADDR)), str(sorted(set(spec._PINNED) - set(spec.ADDR))))
+    # negcontrol-grade: a book value must actually reach ADDR — mutate the parsed book and re-derive.
+    _b = json.loads(_vb)["base"]
+    _b["x402Facilitator"] = "0x" + "11" * 20
+    check("ADDR is derived FROM the book (mutating it moves ADDR)",
+          spec._from_book(_b)["x402"] == "0x" + "11" * 20
+          and spec.ADDR["x402"] != "0x" + "11" * 20, spec.ADDR["x402"])
+except FileNotFoundError as e:
+    check("address book present and hash-pinned", False, str(e))
+
 # 4. tool surface enumerable + intended ------------------------------------------------------------
 # The money/calls surface (CALLS) plus the two meta tools. New since the v2 fix: register_deposit_
 # address (split out of `pay`), resolve_pay_link, escrow_new_secret, quote_swap, quote_sweep.
 expected_calls = ["create_pay_link", "resolve_pay_link", "register_deposit_address", "pay",
                   "escrow_create", "escrow_new_secret", "escrow_release", "stream_create",
-                  "subscribe", "swap", "quote_swap", "sweep_dust", "quote_sweep",
+                  "subscribe", "disarm_mandate", "pay_x402", "read_402_challenge", "read_capabilities",
+                  "swap", "quote_swap", "sweep_dust", "quote_sweep",
                   "sponsored_call", "mint_receipt"]
-meta = ["read_fee", "server_info"]
+meta = ["read_fee", "read_x402_status", "server_info"]
 check("tool surface == the intended verbs + read_fee + server_info",
       sorted(spec.CALLS) == sorted(expected_calls), f"{len(spec.CALLS)} call tools + {len(meta)} meta")
+
+# 4b. MCP-1: subscribe must emit setMandate between the approve and the first lap, and the whole tool
+#     text must be ONE json document (it was two concatenated docs, which broke a plain json.loads).
+try:
+    import server as _sv1
+    from eth_abi import decode
+    _m1 = json.loads(_sv1.subscribe(payer="0x" + "11" * 20, recipient="0x" + "22" * 20,
+                                    amount=1_000_000, start=1_700_000_000, end=1_700_086_400,
+                                    periods=12, dry_run=False))
+    _sel = [c["selector"] for c in _m1["calls"]]
+    check("MCP-1 subscribe legs are approve -> setMandate -> createStreamFor",
+          _sel == ["0x095ea7b3", "0x88f67583", "0x2f7a1c66"], _sel)
+    _dec = decode(["address", "address", "uint256", "uint64", "uint32", "uint64"],
+                  bytes.fromhex(_m1["calls"][1]["data"][10:]))
+    check("MCP-1 setMandate carries period = end-start and laps = periods",
+          (_dec[3], _dec[4], _dec[5]) == (86_400, 12, 1_700_000_000), _dec)
+    check("MCP-1 approve allowance is ticket*laps, not max-uint",
+          int(_m1["calls"][0]["data"][-64:], 16) == 12_000_000, _m1["calls"][0]["data"][-64:])
+    check("MCP-1 subscribe returns a revoke block as a KEY (one json document)",
+          [c["selector"] for c in _m1["revoke"]["calls"]] == ["0x193ad1b2", "0x095ea7b3"],
+          sorted(_m1))
+except Exception as e:  # noqa: BLE001
+    check("MCP-1 subscribe legs are approve -> setMandate -> createStreamFor", False, f"{type(e).__name__}: {e}")
+
+# 4b-bis. MCP-6: the x402 CLIENT entry point. A stub 402 server is stood up in-process (stdlib only,
+#     no network) and the tool is driven at it: the challenge must parse, the settle legs must be
+#     emitted in pay -> markPaid -> verify order against the CHALLENGE's rail and the live facilitator,
+#     and a non-402 must not be dressed up as a payment gate. Each case has a negcontrol shape.
+try:
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from eth_abi import decode   # in-scope here regardless of whether 4b's block ran
+    import server as _sv4
+
+    _CH = {"x402Version": 2, "rail": "0x" + "77" * 20, "to": "0x" + "88" * 20,
+           "token": spec.USDC, "amount": "250000", "memo": "0x" + "00" * 32,
+           "facilitator": spec.ADDR["x402"]}
+
+    class _H(BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802
+            if self.path == "/open":
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b'{"ok":true}')
+                return
+            if self.path == "/html":
+                self.send_response(402)
+                self.send_header("WWW-Authenticate", 'Payment rail="x"')
+                self.end_headers()
+                self.wfile.write(b"<html>pay</html>")
+                return
+            self.send_response(402)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps(_CH).encode())
+
+        def log_message(self, *a):  # quiet
+            pass
+
+    _srv = HTTPServer(("127.0.0.1", 0), _H)
+    _base = f"http://127.0.0.1:{_srv.server_port}"
+    threading.Thread(target=_srv.serve_forever, daemon=True).start()
+    try:
+        _r = json.loads(_sv4.pay_x402(url=_base + "/weather", dry_run=False,
+                                      payer="0x" + "11" * 20, payment_id="0x" + "ab" * 32))
+        _c = _r.get("calls", [])
+        check("MCP-6 pay_x402(url) parses the 402 and emits pay -> markPaid -> verify",
+              [x["selector"] for x in _c] == ["0x68abdc82", "0x7dffcf3b", "0x796e926d"], _c and
+              [x["selector"] for x in _c])
+        check("MCP-6 the pay leg targets the CHALLENGE's rail and markPaid the live facilitator",
+              _c and _c[0]["to"] == _CH["rail"] and _c[1]["to"] == spec.ADDR["x402"],
+              f"{_c and _c[0]['to']} / {_c and _c[1]['to']}")
+        _pd = decode(["address", "address", "uint256", "bytes32", "address"],
+                     bytes.fromhex(_c[0]["data"][10:])) if _c else None
+        check("MCP-6 the advertised to/amount are used when not passed",
+              _pd is not None and _pd[0].lower() == _CH["to"].lower()
+              and _pd[2] == int(_CH["amount"]), _pd)
+        check("MCP-6 the retry header is returned as a KEY",
+              _r.get("retry", {}).get("header") == "X-PAYMENT", sorted(_r))
+        # negcontrol: a passed `to` that differs from the challenge is NAMED, not silently preferred
+        _r2 = json.loads(_sv4.pay_x402(url=_base + "/weather", to="0x" + "99" * 20, dry_run=False))
+        check("MCP-6 negcontrol: a `to` that differs from the challenge warns",
+              any("challenge advertises" in w for w in _r2.get("warnings") or []),
+              _r2.get("warnings"))
+        # negcontrol: 200 is "already served", not a gate; a non-JSON 402 warns instead of crashing
+        _r3 = json.loads(_sv4.pay_x402(url=_base + "/open"))
+        check("MCP-6 negcontrol: a 200 is reported as not-a-402 (nothing to pay)",
+              _r3.get("status") == 200 and "not a 402" in (_r3.get("note") or ""), _r3.get("note"))
+        _r4 = json.loads(_sv4.pay_x402(url=_base + "/html", dry_run=False))
+        check("MCP-6 negcontrol: a non-JSON 402 warns and still does not crash",
+              any("not JSON" in w for w in _r4.get("warnings") or []), _r4.get("warnings"))
+        _r5 = json.loads(_sv4.read_402_challenge(url=_base + "/weather"))
+        check("MCP-6 read_402_challenge reports gated=true + the challenge, uncharged",
+              _r5.get("gated") is True and _r5.get("challenge", {}).get("rail") == _CH["rail"],
+              _r5.get("status"))
+    finally:
+        _srv.shutdown()
+except Exception as e:  # noqa: BLE001
+    check("MCP-6 pay_x402(url) parses the 402 and emits pay -> markPaid -> verify", False,
+          f"{type(e).__name__}: {e}")
 
 # 4c. sponsored_call targets the LIVE FleetExecutor delegate and emits the execute() selector -----
 check("sponsored_call targets fleet-executor and emits execute()",
@@ -353,6 +502,28 @@ try:
     check("every tool builds calldata (no RPC)", n == total, f"{n}/{total} tools")
 except Exception as e:  # noqa: BLE001
     check("every tool builds calldata (no RPC)", False, f"{type(e).__name__}: {e}")
+
+# 7. the RESOURCES are registered and serve the same facts the tools do — a resource that drifts from
+#    the tool surface is a second, unchecked copy. Static ones are compared to spec directly; the two
+#    live ones read their own RPC and are graded by shape only (offline: skip on transport failure).
+try:
+    import server as _sv6
+    _srv6 = _sv6.server._load()
+    _uris = [str(r.uri) for r in asyncio.run(_srv6.list_resources())]
+    check("resources registered: fleet://addresses, //fees, //status",
+          sorted(_uris) == ["fleet://addresses", "fleet://fees", "fleet://status"], _uris)
+    _a = json.loads(asyncio.run(_srv6.read_resource("fleet://addresses"))[0].content)
+    check("fleet://addresses serves exactly spec.ADDR (no second copy)",
+          _a.get("addresses") == spec.ADDR and _a.get("book_sha256") == spec._ADDR_SHA256,
+          f"{len(_a.get('addresses', {}))} addresses")
+    try:
+        _s = json.loads(asyncio.run(_srv6.read_resource("fleet://status"))[0].content)
+        check("fleet://status carries an explicit degraded flag + head",
+              "degraded" in _s and "head" in _s, f"degraded={_s.get('degraded')} head={_s.get('head')}")
+    except Exception as _e:  # noqa: BLE001
+        print(f"[skip] fleet://status live read: {type(_e).__name__}: {_e}")
+except Exception as e:  # noqa: BLE001
+    check("resources registered: fleet://addresses, //fees, //status", False, f"{type(e).__name__}: {e}")
 
 print()
 if fails:

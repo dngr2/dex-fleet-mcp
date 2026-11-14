@@ -89,9 +89,12 @@ CASES = {
 }
 
 
-def _a1_docs(raw: str) -> list:
+def _a1_docs(raw) -> list:
     """A1 returns ONE json doc for most tools, but TWO concatenated docs for `subscribe`
-    (the second is `subscribe.revoke`). Split them without assuming json.loads sees the whole string."""
+    (the second is `subscribe.revoke`). Split them without assuming json.loads sees the whole string.
+    A4's Python flavors return the same concatenation; the TS flavor returns an already-split object."""
+    if isinstance(raw, dict):
+        return [raw]
     dec, i, out = json.JSONDecoder(), 0, []
     while i < len(raw):
         while i < len(raw) and raw[i] in " \t\r\n":
@@ -104,7 +107,7 @@ def _a1_docs(raw: str) -> list:
     return out
 
 
-def _a1_legs(raw: str) -> list:
+def _a1_legs(raw) -> list:
     """Every leg A1 emits, across ALL its docs (so a 2-doc tool still diffs 1:1 against a flattened
     multi-leg consumer like the TS/crewai flavors)."""
     return [c for d in _a1_docs(raw) for c in d.get("calls", [])]
@@ -127,6 +130,24 @@ for name, (a1kw, a4kw) in CASES.items():
     else:
         ok(f"{name}: {len(a4_calls)} call(s) byte-identical to A1")
 
+print("§1b subscribe's `revoke` block is the same undo A1 emits (disarm + the OLD allowance)")
+# The revoke legs ride OUTSIDE `calls` on both sides (a key in A1, `revoke` on the TS return), so §1
+# never sees them. Compare them directly or they can rot silently while every other leg stays exact.
+_a1_doc = _a1_docs(server.subscribe(**CASES["subscribe"][0]))[0]
+_a1_rev = _a1_doc.get("revoke", {}).get("calls", [])
+_a4_docs = _a1_docs(A4.subscribe(**CASES["subscribe"][1]))
+_a4_rev = _a4_docs[0].get("revoke", {}).get("calls", [])
+if len(_a4_rev) != len(_a1_rev):
+    bad(f"subscribe.revoke: {len(_a4_rev)} leg(s) != A1 {len(_a1_rev)}")
+else:
+    _rd = [f"revoke[{i}].{k}: A4={y.get(k)} A1={x.get(k)}"
+           for i, (x, y) in enumerate(zip(_a1_rev, _a4_rev))
+           for k in ("to", "data", "selector", "sig") if k in x and x.get(k) != y.get(k)]
+    if _rd:
+        bad("subscribe.revoke: " + "; ".join(_rd))
+    else:
+        ok(f"subscribe.revoke: {len(_a4_rev)} leg(s) byte-identical to A1")
+
 print("§2 openai/tools.json selectors re-derive from A1 sig, callees match A1 addr")
 oj = json.load(open(os.path.join(HERE, "openai", "tools.json")))
 by_name = {t["name"]: t for t in oj["tools"]}
@@ -135,7 +156,8 @@ by_name = {t["name"]: t for t in oj["tools"]}
 # companion to `pay`). Assert over what is PUBLISHED, and pin the complement by name so a helper that
 # gains a sig — or a published tool that loses one — is caught, not silently skipped.
 UNPUBLISHED = {"resolve_pay_link", "register_deposit_address", "escrow_new_secret",
-               "quote_swap", "quote_sweep"}
+               "quote_swap", "quote_sweep", "read_capabilities", "read_402_challenge",
+               "pay_x402", "disarm_mandate"}
 for name in by_name:
     if name in ("read_fee", "server_info"):
         continue
@@ -335,6 +357,8 @@ else:
             for name, (a1kw, _a4kw) in CASES.items():
                 a1_calls = _a1_legs(getattr(server, name)(**a1kw))
                 got = legs[name]
+                if isinstance(got, dict):        # subscribe returns {calls, revoke}
+                    got = got["calls"]
                 drift = []
                 if len(got) != len(a1_calls):
                     drift.append(f"leg count {len(got)} != A1 {len(a1_calls)}")

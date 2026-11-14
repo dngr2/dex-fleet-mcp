@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+# MCP-4: this server had no pins at all. A clone was installed by `pip install`-by-hope against
+# whatever the interpreter happened to hold, and `selftest.py` — the one gate that proves the surface
+# has not drifted — could not run on a clean machine because nothing installed `mcp`. Pins are exact
+# for the runtime deps that decide calldata and transport (a silent eth_abi bump changes encoded
+# bytes), and ranges are NOT used: this package's output is signed by wallets, so "whatever resolved
+# today" is not an acceptable version of it.
+[project]
+name = "dex-fleet-mcp"
+version = "0.2.0"
+description = "Non-custodial payment rails on Base (chainId 8453) as MCP tools — calldata + eth_call simulation, no keys held"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = ["mcp", "base", "payments", "x402", "web3", "escrow", "agent"]
+classifiers = [
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Operating System :: OS Independent",
+  "Topic :: Office/Business :: Financial",
+]
+dependencies = [
+  "mcp==2.2.0",
+  "httpx==0.28.1",
+  "eth-abi==6.0.0",
+  "eth-utils==6.0.0",
+  "eth-hash[pycryptodome]==0.8.0",
+]
+
+[project.optional-dependencies]
+# CI only: the gate reads `importlib.metadata`-free, but the workflow runs it on both supported
+# Pythons, so the matrix installs pinned wheels there rather than trusting the runner image.
+dev = ["pip-audit==2.9.0"]
+
+[project.scripts]
+dex-fleet-mcp = "server:main"
+
+[project.urls]
+Source = "https://github.com/dngr2/dex-fleet-mcp"
+Spec = "https://dngr2.github.io/dex-products/llms.txt"
+
+# The published console entry is `server:main`; a plain module tree keeps the in-repo layout, so the
+# py-modules list is explicit rather than a package rewrite (every module here is flat by design —
+# `python3 server.py` and `import server` must both keep working unchanged).
+[tool.setuptools]
+py-modules = ["server", "chain", "spec", "dryrun"]
+packages = ["fleet_addr"]
+
+[tool.setuptools.package-data]
+fleet_addr = ["addresses.json"]

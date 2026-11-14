@@ -77,8 +77,10 @@
 - what: Recurring payments on the SAME factory — no new contract. A payer pre-approves a small allowance; each period a fresh vault is minted for the next window and pulled. A missed period is a HOLE, not a debt.
 - contract (StreamFactory (reused)): `0x3882A049ee99B96Ea68DF317713ed76008b9A075`
 - call: `approve(address,uint256)`  selector `0x095ea7b3`
+- call: `setMandate(address,address,uint256,uint64,uint32,uint64)`  selector `0x88f67583`
 - call: `createStreamFor(address,address,address,uint256,uint64,uint64)`  selector `0x2f7a1c66`
-- payment verb: approve(factory, ticket * periods) — ONE signature, bounded (not max-uint); a keeper then calls createStreamFor once per period from that allowance. Revoke anytime with approve(factory, 0).
+- call: `disarmMandate(address,address)`  selector `0x193ad1b2`
+- payment verb: approve(factory, ticket * periods) funds the allowance, then setMandate(recipient, token, ticket, period, laps, t0) ARMS the bounds (the bounded path — a keeper fires createStreamFor inside them). Revoke anytime with disarmMandate + approve(factory, 0).
 - fee: per-period fee to the merchant (live bps read from the factory)
 
 ### f1a-payment-links — Payment links
@@ -107,8 +109,9 @@
 - listed on the landing at https://dngr2.github.io/dex-products/#build
 - what: The on-chain half of an HTTP-402 flow: a server returns 402, the client pays a rail, a gated writer records the settlement, and the server verifies it with a VIEW call then serves the resource. Nothing holds funds.
 - contract (x402Facilitator): `0x5849eF6f21fDC21d5194c24ED6c824965A613739`
+- call: `markPaid(bytes32,address,address,uint256)`  selector `0x7dffcf3b`
 - call: `verify(bytes32,address,address,uint256)`  selector `0x796e926d`
-- payment verb: verify(paymentId, to, token, minAmount) — a VIEW a server calls to gate a resource; a gated writer feeds markPaid from the rail's Paid event
+- payment verb: markPaid(paymentId, to, token, amount) — a gated WRITER records the settlement the rail announced; verify(paymentId, to, token, minAmount) is the VIEW a server calls to gate the resource
 - fee: none — the rail that settled the payment charged its fee
 
 ### settlement — Settlement registry (read-side paid())

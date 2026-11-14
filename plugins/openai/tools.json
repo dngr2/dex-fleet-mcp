@@ -97,6 +97,10 @@
           "expect_fee_bps": {
             "type": "integer",
             "default": -1
+          },
+          "max_amount": {
+            "type": "integer",
+            "default": -1
           }
         },
         "required": [
@@ -151,6 +155,10 @@
           "dry_run": {
             "type": "boolean",
             "default": true
+          },
+          "max_amount": {
+            "type": "integer",
+            "default": -1
           }
         },
         "required": [
@@ -255,6 +263,10 @@
           "dry_run": {
             "type": "boolean",
             "default": true
+          },
+          "max_amount": {
+            "type": "integer",
+            "default": -1
           }
         },
         "required": [
@@ -275,7 +287,7 @@
     },
     {
       "name": "subscribe",
-      "description": "Subscribe (g2a): approve(factory_v2, ticket*periods) then createStreamFor on the v2 StreamFactory. Includes a `revoke` leg against the PAUSED v1 factory \u2014 send it if you granted the old allowance before the migration. A keeper then fires createStreamFor once per period.",
+      "description": "Subscribe (g2a): approve(factory, ticket*periods) then setMandate(...) then createStreamFor. The MANDATE is the bounded authorization \u2014 while it is armed the factory lets ANYONE fire a lap strictly within its limits (ticket, period, laps, monotonic t0), so the keeper needs no standing grant. Also returns a `revoke` block (disarmMandate + approve(v1,0)).",
       "parameters": {
         "type": "object",
         "properties": {
@@ -316,6 +328,10 @@
           "dry_run": {
             "type": "boolean",
             "default": true
+          },
+          "max_amount": {
+            "type": "integer",
+            "default": -1
           }
         },
         "required": [
@@ -328,6 +344,10 @@
         {
           "sig": "approve(address,uint256)",
           "selector": "0x095ea7b3"
+        },
+        {
+          "sig": "setMandate(address,address,uint256,uint64,uint32,uint64)",
+          "selector": "0x88f67583"
         },
         {
           "sig": "createStreamFor(address,address,address,uint256,uint64,uint64)",
@@ -376,6 +396,10 @@
           "dry_run": {
             "type": "boolean",
             "default": true
+          },
+          "max_amount": {
+            "type": "integer",
+            "default": -1
           }
         },
         "required": [
@@ -423,6 +447,10 @@
           "dry_run": {
             "type": "boolean",
             "default": true
+          },
+          "max_amount": {
+            "type": "integer",
+            "default": -1
           }
         },
         "required": [
@@ -509,6 +537,10 @@
           "dry_run": {
             "type": "boolean",
             "default": true
+          },
+          "value_wei": {
+            "type": "integer",
+            "default": -1
           }
         },
         "required": [
@@ -561,20 +593,20 @@
     }
   ],
   "addresses": {
-    "miniapp": "0x417c41d406c61E09958032Cd77338fc1F1ac7D45",
     "p2-forwarder": "0x417c41d406c61E09958032Cd77338fc1F1ac7D45",
-    "g2b-escrow": "0x4B05fA6aD0Ba0D0120Dce19Ce34dde6d1316C237",
-    "g4b-receipts": "0xAE5951d25FEDD06aB7e124e91Dac3AC20f5e7cAF",
+    "f1a-payment-links": "0xeD395024Bba719564bec617b6b42CF6fDC8a252c",
     "p3-router": "0x036645cA607Dc8075Ae9B12A3474C00A82c306e6",
-    "f1c-duster": "0x8c38c2bbECa7575c24ACEf1d907Aa1F4f43CbFB9",
     "g2a-streams": "0x3882A049ee99B96Ea68DF317713ed76008b9A075",
     "g2a-subscriptions": "0x3882A049ee99B96Ea68DF317713ed76008b9A075",
-    "f1a-payment-links": "0xeD395024Bba719564bec617b6b42CF6fDC8a252c",
-    "x402": "0x5849eF6f21fDC21d5194c24ED6c824965A613739",
+    "g2b-escrow": "0x4B05fA6aD0Ba0D0120Dce19Ce34dde6d1316C237",
+    "g4b-receipts": "0xAE5951d25FEDD06aB7e124e91Dac3AC20f5e7cAF",
     "settlement": "0xdDA0728Ff635B555D2Af471E2821055bE08F9127",
     "fleet-executor": "0x410396662089a26C801c54818CCd59640eFCaf77",
+    "x402": "0x5849eF6f21fDC21d5194c24ED6c824965A613739",
     "fleet-paymaster": "0x70A615dDc4cd013Cf4D569Ae3394bF4465229B95",
-    "g4c-toll-registry": "0xc8319D6fbc0A8f1685Df9c567557141A289b7A1b"
+    "g4c-toll-registry": "0xc8319D6fbc0A8f1685Df9c567557141A289b7A1b",
+    "f1c-duster": "0x8c38c2bbECa7575c24ACEf1d907Aa1F4f43CbFB9",
+    "miniapp": "0x417c41d406c61E09958032Cd77338fc1F1ac7D45"
   },
   "spec": "https://dngr2.github.io/dex-products/llms.txt"
 }

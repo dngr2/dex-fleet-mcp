@@ -55,20 +55,20 @@ function _hexToBig(x: unknown): bigint { return BigInt(x == null || x === '' ? 0
 
 
 const ADDR: Record<string, string> = {
-  "miniapp": "0x417c41d406c61E09958032Cd77338fc1F1ac7D45",
   "p2-forwarder": "0x417c41d406c61E09958032Cd77338fc1F1ac7D45",
-  "g2b-escrow": "0x4B05fA6aD0Ba0D0120Dce19Ce34dde6d1316C237",
-  "g4b-receipts": "0xAE5951d25FEDD06aB7e124e91Dac3AC20f5e7cAF",
+  "f1a-payment-links": "0xeD395024Bba719564bec617b6b42CF6fDC8a252c",
   "p3-router": "0x036645cA607Dc8075Ae9B12A3474C00A82c306e6",
-  "f1c-duster": "0x8c38c2bbECa7575c24ACEf1d907Aa1F4f43CbFB9",
   "g2a-streams": "0x3882A049ee99B96Ea68DF317713ed76008b9A075",
   "g2a-subscriptions": "0x3882A049ee99B96Ea68DF317713ed76008b9A075",
-  "f1a-payment-links": "0xeD395024Bba719564bec617b6b42CF6fDC8a252c",
-  "x402": "0x5849eF6f21fDC21d5194c24ED6c824965A613739",
+  "g2b-escrow": "0x4B05fA6aD0Ba0D0120Dce19Ce34dde6d1316C237",
+  "g4b-receipts": "0xAE5951d25FEDD06aB7e124e91Dac3AC20f5e7cAF",
   "settlement": "0xdDA0728Ff635B555D2Af471E2821055bE08F9127",
   "fleet-executor": "0x410396662089a26C801c54818CCd59640eFCaf77",
+  "x402": "0x5849eF6f21fDC21d5194c24ED6c824965A613739",
   "fleet-paymaster": "0x70A615dDc4cd013Cf4D569Ae3394bF4465229B95",
-  "g4c-toll-registry": "0xc8319D6fbc0A8f1685Df9c567557141A289b7A1b"
+  "g4c-toll-registry": "0xc8319D6fbc0A8f1685Df9c567557141A289b7A1b",
+  "f1c-duster": "0x8c38c2bbECa7575c24ACEf1d907Aa1F4f43CbFB9",
+  "miniapp": "0x417c41d406c61E09958032Cd77338fc1F1ac7D45"
 };
 const USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 
@@ -136,7 +136,7 @@ export const create_pay_link_tool = tool({
 });
 // pay: TWO-STEP: register(destination) on the Registry, then transfer(token, depositAddr, amount) on the token; the forwarder sweeps to destination
 /** PAY: the real two-step. Leg 1 register(destination) on the p2 Registry (mints your deposit address, idempotent per nonce); Leg 2 transfer(token, depositAddr, amount) on the TOKEN (or a native value-send when token is the zero address). depositAddr is VERIFIED against registry.predict(owner, destination) before returning. WARNs if read_fee wasn't called this session. */
-export function pay(destination: any, token: any = USDC, amount: any = 0, deposit_addr: any = "", owner: any = "", dry_run: any = true, expect_fee_bps: any = -1): Leg[] {
+export function pay(destination: any, token: any = USDC, amount: any = 0, deposit_addr: any = "", owner: any = "", dry_run: any = true, expect_fee_bps: any = -1, max_amount: any = -1): Leg[] {
   const reg = ADDR['p2-forwarder'];
   const c1 = mkLeg(reg, "register(address)", "0x4420e486", [_addr(destination)]);
   const dep = deposit_addr ? _addr(deposit_addr) : ZERO20;
@@ -147,20 +147,20 @@ export function pay(destination: any, token: any = USDC, amount: any = 0, deposi
 
 export const pay_tool = tool({
   description: "PAY: the real two-step. Leg 1 register(destination) on the p2 Registry (mints your deposit address, idempotent per nonce); Leg 2 transfer(token, depositAddr, amount) on the TOKEN (or a native value-send when token is the zero address). depositAddr is VERIFIED against registry.predict(owner, destination) before returning. WARNs if read_fee wasn't called this session.",
-  parameters: jsonSchema({"type": "object", "properties": {"destination": {"type": ["string", "array", "object"]}, "token": {"type": "string", "default": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"}, "amount": {"type": "integer", "default": 0}, "deposit_addr": {"type": ["string", "array", "object"], "default": ""}, "owner": {"type": ["string", "array", "object"], "default": ""}, "dry_run": {"type": "boolean", "default": true}, "expect_fee_bps": {"type": "integer", "default": -1}}, "required": ["destination"]}),
-  execute: (a: any) => pay(a.destination, a.token, a.amount, a.deposit_addr, a.owner, a.dry_run, a.expect_fee_bps),
+  parameters: jsonSchema({"type": "object", "properties": {"destination": {"type": ["string", "array", "object"]}, "token": {"type": "string", "default": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"}, "amount": {"type": "integer", "default": 0}, "deposit_addr": {"type": ["string", "array", "object"], "default": ""}, "owner": {"type": ["string", "array", "object"], "default": ""}, "dry_run": {"type": "boolean", "default": true}, "expect_fee_bps": {"type": "integer", "default": -1}, "max_amount": {"type": "integer", "default": -1}}, "required": ["destination"]}),
+  execute: (a: any) => pay(a.destination, a.token, a.amount, a.deposit_addr, a.owner, a.dry_run, a.expect_fee_bps, a.max_amount),
 });
 // escrow_create: create(counterparty, token, amount, hashlock, timeout) -> escrow address (hashlock is already bytes32; see escrow_new_secret)
 /** Create an escrow (g2b) locked against a hashlock or arbiter; funds sit in the contract until release or refund. `hashlock` is ALREADY bytes32 — call escrow_new_secret() first and pass its `hashlock`; the matching `preimage` goes to escrow_release (never re-hash it). */
-export function escrow_create(counterparty: any, token: any = USDC, amount: any = 0, hashlock: any = "", timeout: any = 0, dry_run: any = true): Leg[] {
+export function escrow_create(counterparty: any, token: any = USDC, amount: any = 0, hashlock: any = "", timeout: any = 0, dry_run: any = true, max_amount: any = -1): Leg[] {
   const legs: Leg[] = [mkLeg(ADDR['g2b-escrow'], "create(address,address,uint256,bytes32,uint64)", "0xa083c5e1", [_addr(counterparty), _addr(token), _hexToBig(amount), _bytes32(hashlock), _hexToBig(timeout)])];
   return legs;
 }
 
 export const escrow_create_tool = tool({
   description: "Create an escrow (g2b) locked against a hashlock or arbiter; funds sit in the contract until release or refund. `hashlock` is ALREADY bytes32 \u2014 call escrow_new_secret() first and pass its `hashlock`; the matching `preimage` goes to escrow_release (never re-hash it).",
-  parameters: jsonSchema({"type": "object", "properties": {"counterparty": {"type": ["string", "array", "object"]}, "token": {"type": "string", "default": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"}, "amount": {"type": "integer", "default": 0}, "hashlock": {"type": ["string", "array", "object"], "default": ""}, "timeout": {"type": "integer", "default": 0}, "dry_run": {"type": "boolean", "default": true}}, "required": ["counterparty"]}),
-  execute: (a: any) => escrow_create(a.counterparty, a.token, a.amount, a.hashlock, a.timeout, a.dry_run),
+  parameters: jsonSchema({"type": "object", "properties": {"counterparty": {"type": ["string", "array", "object"]}, "token": {"type": "string", "default": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"}, "amount": {"type": "integer", "default": 0}, "hashlock": {"type": ["string", "array", "object"], "default": ""}, "timeout": {"type": "integer", "default": 0}, "dry_run": {"type": "boolean", "default": true}, "max_amount": {"type": "integer", "default": -1}}, "required": ["counterparty"]}),
+  execute: (a: any) => escrow_create(a.counterparty, a.token, a.amount, a.hashlock, a.timeout, a.dry_run, a.max_amount),
 });
 // escrow_release: on the escrow contract: release(preimage) / refund() / arbiterRelease() / arbiterRefund() — preimage is the RAW bytes32, never a re-hash
 const SEL_escrow_release: Record<string, string> = {"release": "0x67d42a8b", "refund": "0x590e1ae3", "arbiterRelease": "0x04c3fa40", "arbiterRefund": "0xd20c76f8"};
@@ -186,7 +186,7 @@ export const escrow_release_tool = tool({
 const SEL_stream_create_a = "0x095ea7b3";
 const SEL_stream_create_c = "0x88379c90";
 /** Create a payment stream (g2a): approve the factory, then createStream(recipient, token, amount, start, end); the recipient withdraw()s as it vests. */
-export function stream_create(recipient: any, token: any = USDC, amount: any = 0, start: any = 0, end: any = 0, dry_run: any = true): Leg[] {
+export function stream_create(recipient: any, token: any = USDC, amount: any = 0, start: any = 0, end: any = 0, dry_run: any = true, max_amount: any = -1): Leg[] {
   const factory = ADDR['g2a-streams'];
   const approve = mkLeg(_addr(token), 'approve(address,uint256)', SEL_stream_create_a, [factory, amount]);
   const create = mkLeg(factory, "createStream(address,address,uint256,uint64,uint64)", SEL_stream_create_c, [recipient, token, _hexToBig(amount), _hexToBig(start), _hexToBig(end)]);
@@ -196,30 +196,38 @@ export function stream_create(recipient: any, token: any = USDC, amount: any = 0
 
 export const stream_create_tool = tool({
   description: "Create a payment stream (g2a): approve the factory, then createStream(recipient, token, amount, start, end); the recipient withdraw()s as it vests.",
-  parameters: jsonSchema({"type": "object", "properties": {"recipient": {"type": ["string", "array", "object"]}, "token": {"type": "string", "default": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"}, "amount": {"type": "integer", "default": 0}, "start": {"type": "integer", "default": 0}, "end": {"type": "integer", "default": 0}, "dry_run": {"type": "boolean", "default": true}}, "required": ["recipient"]}),
-  execute: (a: any) => stream_create(a.recipient, a.token, a.amount, a.start, a.end, a.dry_run),
+  parameters: jsonSchema({"type": "object", "properties": {"recipient": {"type": ["string", "array", "object"]}, "token": {"type": "string", "default": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"}, "amount": {"type": "integer", "default": 0}, "start": {"type": "integer", "default": 0}, "end": {"type": "integer", "default": 0}, "dry_run": {"type": "boolean", "default": true}, "max_amount": {"type": "integer", "default": -1}}, "required": ["recipient"]}),
+  execute: (a: any) => stream_create(a.recipient, a.token, a.amount, a.start, a.end, a.dry_run, a.max_amount),
 });
-// subscribe: approve(factory, ticket*periods) is the whole mandate; a keeper calls createStreamFor once per period. `revoke` returns the v1 approve(factory_v1, 0) leg
+// subscribe: bounded path: approve(factory, ticket*periods) is the allowance, setMandate(recipient, token, ticket, period, laps, t0) is the on-chain authorization. A keeper then fires createStreamFor once per period; without a mandate the keeper only works while isKeeper is true (the hedge path). `revoke` also emits disarmMandate + approve(v1,0)
 const SEL_subscribe_a = "0x095ea7b3";
+const SEL_subscribe_m = "0x88f67583";
 const SEL_subscribe_c = "0x2f7a1c66";
-/** Subscribe (g2a): approve(factory_v2, ticket*periods) then createStreamFor on the v2 StreamFactory. Includes a `revoke` leg against the PAUSED v1 factory — send it if you granted the old allowance before the migration. A keeper then fires createStreamFor once per period. */
-export function subscribe(payer: any, recipient: any, token: any = USDC, amount: any = 0, start: any = 0, end: any = 0, periods: any = 1, dry_run: any = true): Leg[] {
+const SEL_subscribe_d = "0x193ad1b2";
+/** Subscribe (g2a): approve(factory, ticket*periods) then setMandate(...) then createStreamFor. The MANDATE is the bounded authorization — while it is armed the factory lets ANYONE fire a lap strictly within its limits (ticket, period, laps, monotonic t0), so the keeper needs no standing grant. Also returns a `revoke` block (disarmMandate + approve(v1,0)). */
+export function subscribe(payer: any, recipient: any, token: any = USDC, amount: any = 0, start: any = 0, end: any = 0, periods: any = 1, dry_run: any = true, max_amount: any = -1): { calls: Leg[]; revoke: Leg[] } {
   const factory = ADDR['g2a-subscriptions'];
-  const approve = mkLeg(_addr(token), 'approve(address,uint256)', SEL_subscribe_a, [factory, BigInt(amount) * BigInt(periods)]);
-  const create = mkLeg(factory, "createStreamFor(address,address,address,uint256,uint64,uint64)", SEL_subscribe_c, [payer, recipient, token, _hexToBig(amount), _hexToBig(start), _hexToBig(end)]);
-  const revoke = mkLeg(_addr(token), "approve(address,uint256)", "0x095ea7b3", [_addr("0x2bB5b763a8A85e446909674177e65cb6F1052b4F"), 0n], 'send only if you hold an OLD v1 allowance');
-  const legs: Leg[] = [approve, create, revoke];
-  return legs;
+  const ticket = BigInt(amount), laps = BigInt(periods);
+  const period = _hexToBig(end) - _hexToBig(start);
+  const approve = mkLeg(_addr(token), 'approve(address,uint256)', SEL_subscribe_a, [factory, ticket * laps]);
+  const mandate = mkLeg(factory, 'setMandate(address,address,uint256,uint64,uint32,uint64)', SEL_subscribe_m, [_addr(recipient), _addr(token), ticket, period, Number(laps), _hexToBig(start)]);
+  const create = mkLeg(factory, "createStreamFor(address,address,address,uint256,uint64,uint64)", SEL_subscribe_c, [_addr(payer), _addr(recipient), _addr(token), ticket, _hexToBig(start), _hexToBig(end)]);
+  const legs: Leg[] = [approve, mandate, create];
+  const revoke: Leg[] = [
+    mkLeg(factory, 'disarmMandate(address,address)', SEL_subscribe_d, [_addr(recipient), _addr(token)]),
+    mkLeg(_addr(token), "approve(address,uint256)", "0x095ea7b3", [_addr("0x2bB5b763a8A85e446909674177e65cb6F1052b4F"), 0n], 'the OLD allowance'),
+  ];
+  return { calls: legs, revoke };
 }
 
 export const subscribe_tool = tool({
-  description: "Subscribe (g2a): approve(factory_v2, ticket*periods) then createStreamFor on the v2 StreamFactory. Includes a `revoke` leg against the PAUSED v1 factory \u2014 send it if you granted the old allowance before the migration. A keeper then fires createStreamFor once per period.",
-  parameters: jsonSchema({"type": "object", "properties": {"payer": {"type": ["string", "array", "object"]}, "recipient": {"type": ["string", "array", "object"]}, "token": {"type": "string", "default": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"}, "amount": {"type": "integer", "default": 0}, "start": {"type": "integer", "default": 0}, "end": {"type": "integer", "default": 0}, "periods": {"type": "integer", "default": 1}, "dry_run": {"type": "boolean", "default": true}}, "required": ["payer", "recipient"]}),
-  execute: (a: any) => subscribe(a.payer, a.recipient, a.token, a.amount, a.start, a.end, a.periods, a.dry_run),
+  description: "Subscribe (g2a): approve(factory, ticket*periods) then setMandate(...) then createStreamFor. The MANDATE is the bounded authorization \u2014 while it is armed the factory lets ANYONE fire a lap strictly within its limits (ticket, period, laps, monotonic t0), so the keeper needs no standing grant. Also returns a `revoke` block (disarmMandate + approve(v1,0)).",
+  parameters: jsonSchema({"type": "object", "properties": {"payer": {"type": ["string", "array", "object"]}, "recipient": {"type": ["string", "array", "object"]}, "token": {"type": "string", "default": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"}, "amount": {"type": "integer", "default": 0}, "start": {"type": "integer", "default": 0}, "end": {"type": "integer", "default": 0}, "periods": {"type": "integer", "default": 1}, "dry_run": {"type": "boolean", "default": true}, "max_amount": {"type": "integer", "default": -1}}, "required": ["payer", "recipient"]}),
+  execute: (a: any) => subscribe(a.payer, a.recipient, a.token, a.amount, a.start, a.end, a.periods, a.dry_run, a.max_amount),
 });
 // swap: swapExactTokensForTokens(ExactInputParams) — hops are handed in; quote_swap computes amount_out_min
 /** Swap (p3 router). Hops are handed in; the router takes a 5 bps fee on INPUT to treasury. amount_out_min is your slippage guard. */
-export function swap(amount_in: any, amount_out_min: any, hops: any, recipient: any, deadline: any = 0, token_in: any = "", dry_run: any = true): Leg[] {
+export function swap(amount_in: any, amount_out_min: any, hops: any, recipient: any, deadline: any = 0, token_in: any = "", dry_run: any = true, max_amount: any = -1): Leg[] {
   const params = [_hexToBig(amount_in), _hexToBig(amount_out_min), _hops7(hops), _addr(recipient), _hexToBig(deadline)];
   const legs: Leg[] = [mkLeg(ADDR['p3-router'], "swapExactTokensForTokens((uint256,uint256,(uint8,address,address,uint24,bool,address,address)[],address,uint256))", "0xd3bd0b52", [params],
                        'fee is taken on INPUT; approve the router for amount_in')];
@@ -228,12 +236,12 @@ export function swap(amount_in: any, amount_out_min: any, hops: any, recipient: 
 
 export const swap_tool = tool({
   description: "Swap (p3 router). Hops are handed in; the router takes a 5 bps fee on INPUT to treasury. amount_out_min is your slippage guard.",
-  parameters: jsonSchema({"type": "object", "properties": {"amount_in": {"type": "integer"}, "amount_out_min": {"type": "integer"}, "hops": {"type": ["string", "array", "object"]}, "recipient": {"type": ["string", "array", "object"]}, "deadline": {"type": "integer", "default": 0}, "token_in": {"type": ["string", "array", "object"], "default": ""}, "dry_run": {"type": "boolean", "default": true}}, "required": ["amount_in", "amount_out_min", "hops", "recipient"]}),
-  execute: (a: any) => swap(a.amount_in, a.amount_out_min, a.hops, a.recipient, a.deadline, a.token_in, a.dry_run),
+  parameters: jsonSchema({"type": "object", "properties": {"amount_in": {"type": "integer"}, "amount_out_min": {"type": "integer"}, "hops": {"type": ["string", "array", "object"]}, "recipient": {"type": ["string", "array", "object"]}, "deadline": {"type": "integer", "default": 0}, "token_in": {"type": ["string", "array", "object"], "default": ""}, "dry_run": {"type": "boolean", "default": true}, "max_amount": {"type": "integer", "default": -1}}, "required": ["amount_in", "amount_out_min", "hops", "recipient"]}),
+  execute: (a: any) => swap(a.amount_in, a.amount_out_min, a.hops, a.recipient, a.deadline, a.token_in, a.dry_run, a.max_amount),
 });
 // sweep_dust: sweep(tokens, hops, minOut) funnels scattered dust to USDC in one tx (needs Permit2 approvals)
 /** Sweep dust to USDC (f1c). One tx: pull balances via Permit2, one-hop each token to USDC, deliver to you. Needs Permit2 approvals first. */
-export function sweep_dust(tokens: any, hops: any, min_out: any, dry_run: any = true): Leg[] {
+export function sweep_dust(tokens: any, hops: any, min_out: any, dry_run: any = true, max_amount: any = -1): Leg[] {
   const mo = _aslist(min_out).map((x: any) => BigInt(x));
   const legs: Leg[] = [mkLeg(ADDR['f1c-duster'], "sweep(address[],(uint8,address,address,uint24,address)[],uint256[])", "0xe7ea3ccb", [_aslist(tokens), _hops5(hops), mo],
                        'zero fee by design; approve Permit2 first')];
@@ -242,8 +250,8 @@ export function sweep_dust(tokens: any, hops: any, min_out: any, dry_run: any = 
 
 export const sweep_dust_tool = tool({
   description: "Sweep dust to USDC (f1c). One tx: pull balances via Permit2, one-hop each token to USDC, deliver to you. Needs Permit2 approvals first.",
-  parameters: jsonSchema({"type": "object", "properties": {"tokens": {"type": ["string", "array", "object"]}, "hops": {"type": ["string", "array", "object"]}, "min_out": {"type": ["string", "array", "object"]}, "dry_run": {"type": "boolean", "default": true}}, "required": ["tokens", "hops", "min_out"]}),
-  execute: (a: any) => sweep_dust(a.tokens, a.hops, a.min_out, a.dry_run),
+  parameters: jsonSchema({"type": "object", "properties": {"tokens": {"type": ["string", "array", "object"]}, "hops": {"type": ["string", "array", "object"]}, "min_out": {"type": ["string", "array", "object"]}, "dry_run": {"type": "boolean", "default": true}, "max_amount": {"type": "integer", "default": -1}}, "required": ["tokens", "hops", "min_out"]}),
+  execute: (a: any) => sweep_dust(a.tokens, a.hops, a.min_out, a.dry_run, a.max_amount),
 });
 // sponsored_call: SIGNED-INTENT batch on the FleetExecutor EIP-7702 delegate: the authority signs EIP-712 off-chain, any relayer carries execute(calls,nonce,deadline,sig); the actor's frame, the relayer's gas
 /** SIGNED-INTENT batch on the FleetExecutor EIP-7702 delegate (the authority signs EIP-712 off-chain; ANY relayer carries it, paying the gas, while the authority's own frame runs the calls). Calls are (target,value,data). If you omit nonce/deadline/sig you get `needs_signature: true` + the digest() to sign — the returned calldata alone is NOT sendable. Call digest() on the AUTHORITY address. */
@@ -262,15 +270,15 @@ export const sponsored_call_tool = tool({
 });
 // mint_receipt: mintForEscrow(escrow) — mint the one proof-of-payment NFT to the payer of a SETTLED escrow
 /** Mint the one proof-of-payment receipt NFT (g4b) for a SETTLED escrow, to the payer. Payable: send mintFeeWei. */
-export function mint_receipt(escrow: any, dry_run: any = true): Leg[] {
+export function mint_receipt(escrow: any, dry_run: any = true, value_wei: any = -1): Leg[] {
   const legs: Leg[] = [mkLeg(ADDR['g4b-receipts'], "mintForEscrow(address)", "0xa98aeecb", [_addr(escrow)])];
   return legs;
 }
 
 export const mint_receipt_tool = tool({
   description: "Mint the one proof-of-payment receipt NFT (g4b) for a SETTLED escrow, to the payer. Payable: send mintFeeWei.",
-  parameters: jsonSchema({"type": "object", "properties": {"escrow": {"type": ["string", "array", "object"]}, "dry_run": {"type": "boolean", "default": true}}, "required": ["escrow"]}),
-  execute: (a: any) => mint_receipt(a.escrow, a.dry_run),
+  parameters: jsonSchema({"type": "object", "properties": {"escrow": {"type": ["string", "array", "object"]}, "dry_run": {"type": "boolean", "default": true}, "value_wei": {"type": "integer", "default": -1}}, "required": ["escrow"]}),
+  execute: (a: any) => mint_receipt(a.escrow, a.dry_run, a.value_wei),
 });
 export const TOOLS = { create_pay_link, pay, escrow_create, escrow_release, stream_create, subscribe, swap, sweep_dust, sponsored_call, mint_receipt };
 export const TOOLS_AI = { create_pay_link_tool, pay_tool, escrow_create_tool, escrow_release_tool, stream_create_tool, subscribe_tool, swap_tool, sweep_dust_tool, sponsored_call_tool, mint_receipt_tool };
