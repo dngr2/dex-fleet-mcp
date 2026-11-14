@@ -20,6 +20,13 @@ ROOT="$(cd "$HERE/../.." && pwd)"
 REPO_SLUG="${REPO_SLUG:-dngr2/dex-fleet-mcp}"
 STAGE="${STAGE:-/tmp/dex-fleet-mcp-stage}"
 DRY=0; [ "${1:-}" = "--dry-run" ] && DRY=1
+# PER-RUN LOGS: a fixed /tmp name is overwritten by the next run, so a red run's evidence vanishes the
+# moment someone re-runs — and a DRY run "passing" silently replaces the real one's transcript. One
+# directory per run, named, and the tally at the end points at it.
+RUN="${RUN:-$(date -u +%Y%m%dT%H%M%SZ)-$$}"
+LOGDIR="/tmp/dex-mcp-publish/$RUN"
+mkdir -p "$LOGDIR"
+echo "log: $LOGDIR"
 
 [ -d "$ROOT/../fleet-shared/docs" ] || { echo "REFUSING: no fleet-shared/docs" >&2; exit 1; }
 
@@ -105,26 +112,46 @@ PY
 )  || { echo "REFUSING: vendored address book does not match its pin" >&2; exit 1; }
 
 echo "— gate (b) selftest —"
-( cd "$STAGE" && python3 selftest.py > /tmp/publish-selftest.log 2>&1 ) || {
-  echo "REFUSING: selftest RED — see /tmp/publish-selftest.log" >&2; tail -20 /tmp/publish-selftest.log >&2; exit 1; }
-N_PASS="$(grep -c '^\[PASS\]' /tmp/publish-selftest.log || true)"
-echo "  $N_PASS PASS rows"
-[ "$N_PASS" -ge 20 ] || { echo "REFUSING: only $N_PASS PASS rows (floor 20)" >&2; exit 1; }
+( cd "$STAGE" && python3 selftest.py > "$LOGDIR/selftest.log" 2>&1 ) || {
+  echo "REFUSING: selftest RED — see $LOGDIR/selftest.log" >&2; tail -20 "$LOGDIR/selftest.log" >&2; exit 1; }
+N_PASS="$(grep -c '^\[PASS\]' "$LOGDIR/selftest.log" || true)"
+N_FAIL="$(grep -c '^\[FAIL\]' "$LOGDIR/selftest.log" || true)"
+echo "  $N_PASS PASS row(s), $N_FAIL FAIL row(s)"
+# BOTH TALLY TEETH: an all-skip run still exits 0, and a partly-skipped run reads as green. The floor
+# is the structural set; the fail count must be flat zero.
+[ "$N_PASS" -ge 20 ] || { echo "REFUSING: only $N_PASS PASS rows (floor 20) — a skid, not a pass" >&2; exit 1; }
+[ "$N_FAIL" = 0 ] || { echo "REFUSING: $N_FAIL FAIL row(s) in selftest" >&2; exit 1; }
 
 echo "— gate (c) plugins: gen --check + verify —"
-( cd "$STAGE/plugins" && python3 gen.py --check && python3 verify.py | tail -2 ) || {
-  echo "REFUSING: generated plugins are stale or drift from A1 in the stage" >&2; exit 1; }
+set -o pipefail
+( cd "$STAGE/plugins" && python3 gen.py --check ) || {
+  echo "REFUSING: generated plugins are stale vs the A1 in the stage" >&2; exit 1; }
+( cd "$STAGE/plugins" && python3 verify.py > "$LOGDIR/verify.log" 2>&1 ) || {
+  echo "REFUSING: verify.py RED — see $LOGDIR/verify.log" >&2; tail -20 "$LOGDIR/verify.log" >&2; exit 1; }
+N_VFAIL="$(grep -c '^  FAIL ' "$LOGDIR/verify.log" || true)"
+echo "  $(tail -1 "$LOGDIR/verify.log")"
+[ "$N_VFAIL" = 0 ] || { echo "REFUSING: $N_VFAIL verify FAIL row(s)" >&2; exit 1; }
+grep -q '^  ok   TS/' "$LOGDIR/verify.log" || { echo "REFUSING: the TS leg never ran (skid)" >&2; exit 1; }
+set +o pipefail
 
 echo "— gate (d) calldata for every tool, offline —"
-( cd "$STAGE" && python3 dryrun.py --nosim | tail -1 ) | tee /tmp/publish-dryrun.log
-grep -q "22/22" /tmp/publish-dryrun.log || { echo "REFUSING: not every tool built calldata" >&2; exit 1; }
+( cd "$STAGE" && python3 dryrun.py --nosim > "$LOGDIR/dryrun.log" 2>&1 ) || {
+  echo "REFUSING: dryrun errored — see $LOGDIR/dryrun.log" >&2; exit 1; }
+tail -1 "$LOGDIR/dryrun.log"
+grep -q "22/22" "$LOGDIR/dryrun.log" || { echo "REFUSING: not every tool built calldata" >&2; exit 1; }
 
 echo "— gate (e) the marker: the four audited fixes are IN the stage —"
-for pat in 'def setMandate\|setMandate(' 'QUORUM' 'def pay_x402' 'feeBps' ; do
-  grep -rq "$pat" "$STAGE"/server.py "$STAGE"/chain.py "$STAGE"/spec.py || {
-    echo "REFUSING: marker pattern '$pat' absent from the stage" >&2; exit 1; }
-done
-echo "  setMandate / quorum / pay_x402 / live feeBps all present"
+# PER-FILE and ANCHORED: a bare `grep QUORUM` is satisfied by QUORUM_WAIT alone, and `feeBps` appears
+# in prose. Each marker below must be the CODE that makes the audit row true, in its own file.
+marker() { grep -q -- "$2" "$STAGE/$1" || { echo "REFUSING: marker '$2' absent from $1" >&2; exit 1; }; }
+marker server.py 'def pay_x402'
+marker server.py 'def read_402_challenge'
+marker chain.py  '^QUORUM = '
+marker chain.py  '^def _race'
+marker spec.py   'setMandate('
+marker spec.py   'feeBps'
+grep -q 'pay_x402' "$STAGE/README.md" || { echo "REFUSING: README does not document pay_x402" >&2; exit 1; }
+echo "  setMandate / quorum / pay_x402 (+read tool) / live feeBps all present"
 
 # 8. commit, then push.
 #

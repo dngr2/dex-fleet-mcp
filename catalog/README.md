@@ -13,4 +13,4 @@ with *this copy*, not with the live site.
 monorepo rewrites `fleet_addr/addresses.json` and its SHA-256 pin in `spec.py`; `publish.sh` refreshes
 this directory in the same push. Nothing here is hand-edited.
 
-Snapshot taken 2026-11-14T01:35Z, PRODUCTS.json md5 `70644208c4…`.
+Snapshot taken 2026-11-14T01:46Z, PRODUCTS.json md5 `70644208c4…`.
