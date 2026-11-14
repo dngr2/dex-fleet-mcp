@@ -5,7 +5,7 @@
 **An agent gets live, non-custodial payment rails on Base in one line of config. No API key, no account, no server holding funds.**
 
 This is a thin, read-only MCP wrapper over the live fleet products — 13 money verbs across the rails
-plus 7 read-only helpers. A money tool builds the exact calldata for the product's money verb and, by
+plus 6 read-only helpers and 3 resources. A money tool builds the exact calldata for the product's money verb and, by
 default, **simulates it** (`eth_call`) so the agent sees the result before anything is signed.
 Nothing here signs or broadcasts — a wallet layer does that. 22 tools total.
 

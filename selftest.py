@@ -365,6 +365,21 @@ try:
 except Exception as e:  # noqa: BLE001
     check("R3-4 unsigned sponsored_call flags needs_signature", False, f"{type(e).__name__}: {e}")
 
+# 4c-quater. BUILD-DOOR-HOOK.md names tools in prose a build agent pastes into the site. It drifted
+# (12 tools / no pay_x402) while server.py moved on. Assert every tool it NAMES is a real tool, and
+# that it names the audited additions — a prose list nothing checks rots silently.
+try:
+    _door = open(os.path.join(HERE, "BUILD-DOOR-HOOK.md"), encoding="utf-8").read()
+    # the tool names ride inside ONE backtick span separated by middots, so split on non-word chars
+    # rather than looking for a backtick per name.
+    _named = set(re.findall(r"\b[a-z][a-z0-9_]{3,}\b", _door)) & (set(spec.CALLS) | {"read_fee"})
+    _ghost = sorted(_named - set(spec.CALLS) - {"read_fee", "server_info"})
+    check("BUILD-DOOR-HOOK.md names only real tools", not _ghost, str(_ghost))
+    _need = {"pay_x402", "disarm_mandate", "read_capabilities"}
+    check("BUILD-DOOR-HOOK.md names the audited additions", _need <= _named, str(sorted(_need - _named)))
+except FileNotFoundError:
+    print("[skip] BUILD-DOOR-HOOK.md absent")
+
 # 4c-ter. R3-6: g3a-sponsorship must be GONE from the pin, the fee table and the catalog — it was a
 #     second product entry for something now expressed as `sponsored_call`. An agent reading
 #     server_info must not see a duplicate.

@@ -4,7 +4,7 @@ The Web Upgrade Spec's **Door 3 (developers and agents)** is a `/build/` page. W
 layer lands, paste the block below into its **agent line** verbatim. Nothing here drifts: the config
 is the same one in `README.md`, `MERCHANT-START.md`, and the generated `site/llms.txt`.
 
-Source of truth for the tool list: `server.py` (12 tools). Anti-drift gate: `selftest.py`.
+Source of truth for the tool list: `server.py` (22 tools). Anti-drift gate: `selftest.py`.
 
 ---
 
@@ -19,8 +19,9 @@ one tool (calldata for the ONE call, simulated dry-run by default). Add to any M
   "args": ["products/mcp-server/server.py"] } } }
 ```
 
-Tools: `create_pay_link · pay · escrow_create · escrow_release · stream_create · subscribe · swap ·
-sweep_dust · sponsored_call · mint_receipt · read_fee` (live bps per contract).
+Tools: `create_pay_link · pay · pay_x402 · escrow_create · escrow_release · stream_create ·
+subscribe · disarm_mandate · swap · sweep_dust · sponsored_call · mint_receipt · read_fee` (live bps per
+contract) plus read-only helpers (`read_capabilities`, `read_402_challenge`, `server_info`).
 Spec/agent map: `/llms.txt` · catalog: `/PRODUCTS.json` · build: `products/mcp-server/`.
 
 ---
